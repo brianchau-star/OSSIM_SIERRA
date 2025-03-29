@@ -98,7 +98,16 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     regs.a3 = inc_sz;
 
     syscall(caller, 17, &regs);
-    alloc_addr = &old_sbrk;
+    // alloc_addr = &old_sbrk;
+    if (get_free_vmrg_area(caller, vmaid, size, &rgnode) != 0)
+    {
+      pthread_mutex_unlock(&mmvm_lock);
+      return -1;
+    }
+    caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
+    caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
+    *alloc_addr = rgnode.rg_start;
+
     cur_vma->sbrk += inc_sz;
     inc_limit_ret = cur_vma->sbrk;
   }
