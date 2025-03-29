@@ -149,7 +149,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
  */
 int __free(struct pcb_t *caller, int vmaid, int rgid)
 {
-  // struct vm_rg_struct rgnode;
+  struct vm_rg_struct rgnode;
 
   // Dummy initialization for avoding compiler dummay warning
   // in incompleted TODO code rgnode will overwrite through implementing
@@ -159,9 +159,20 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
     return -1;
 
   /* TODO: Manage the collect freed region to freerg_list */
+  struct vm_rg_struct *free_region = get_symrg_byid(caller->mm, rgid);
+  int free_start = free_region->rg_start;
+  int free_end = free_region->rg_end;
 
+  // freed free_region
+  free_region->rg_start = -1;
+  free_region->rg_end = -1;
+
+  struct vm_rg_struct *new_free_area = (struct vm_rg_struct *)malloc(sizeof(struct vm_area_struct));
+  new_free_area->rg_start = free_start;
+  new_free_area->rg_end = free_end;
+  new_free_area->vmaid = vmaid;
   /*enlist the obsoleted memory region */
-  // enlist_vm_freerg_list();
+  enlist_vm_freerg_list(caller->mm, new_free_area);
 
   return 0;
 }
