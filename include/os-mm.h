@@ -47,7 +47,7 @@ struct vm_area_struct {
  * Memory management struct
  */
 struct mm_struct {
-   uint32_t *pgd;
+   uint32_t *pgd; // page table
 
    struct vm_area_struct *mmap;
 
