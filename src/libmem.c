@@ -286,13 +286,13 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller)
    *  SYSCALL 17 sys_memmap with SYSMEM_IO_READ
    */
   int phyaddr = (fpn * PAGE_SIZE) + off;
-  // struct sc_regs regs;
-  // regs.a1 = ...
-  // regs.a2 = ...
-  // regs.a3 = ...
+  struct sc_regs regs;
+  regs.a1 = SYSMEM_IO_READ;
+  regs.a2 = addr;
+  regs.a3 = data;
 
   /* SYSCALL 17 sys_memmap */
-
+  syscall(caller, 17, &regs);
   // Update data
   // data = (BYTE)
 
@@ -330,7 +330,7 @@ int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller)
 
   // Update data
   // data = (BYTE)
-  
+
   return 0;
 }
 
