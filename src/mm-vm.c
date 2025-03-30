@@ -42,7 +42,7 @@ int __mm_swap_page(struct pcb_t *caller, int vicfpn, int swpfpn)
   return 0;
 }
 
-/*get_vm_area_node - get vm area for a number of pages
+/*get_vm_area_node - get vm area for a number of pages // SELF NOTE: need further check for the meaning of this function
  *@caller: caller
  *@vmaid: ID vm area to alloc memory region
  *@incpgnum: number of page
@@ -58,10 +58,17 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
 
   newrg = malloc(sizeof(struct vm_rg_struct));
 
+  if (cur_vma == NULL)
+  {
+    free(newrg);
+    return NULL;
+  }
   /* TODO: update the newrg boundary
   // newrg->rg_start = ...
   // newrg->rg_end = ...
   */
+  newrg->rg_start = cur_vma->vm_end;
+  newrg->rg_end = newrg->rg_start + alignedsz; // SELF NOTE: alignedsz is the aligned size, so I use it instead of size
 
   return newrg;
 }
@@ -81,7 +88,7 @@ int validate_overlap_vm_area(struct pcb_t *caller, int vmaid, int vmastart, int 
   while (vma)
   {
     // Check if new region overlaps with any existing VMA
-    if (!(vma->vm_end <= vmastart || vma->vm_start >= vmaend)) // SELF NOTE: every other case except this is overlap
+    if (!(vma->vm_end < vmastart || vma->vm_start > vmaend)) // SELF NOTE: every other case except this is overlap
     {
       return -1; // overlap
     }
