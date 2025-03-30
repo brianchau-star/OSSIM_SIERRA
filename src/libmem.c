@@ -184,11 +184,42 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
  */
 int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
 {
-  /* TODO Implement allocation on vm area 0 */
   int addr;
+  int free_id = -1;
 
-  /* By default using vmaid = 0 */
-  return __alloc(proc, 0, reg_index, size, &addr);
+  if (proc->mm->symrgtbl[reg_index].rg_start == -1 &&
+      proc->mm->symrgtbl[reg_index].rg_end == -1)
+  {
+    free_id = reg_index;
+  }
+  else
+  {
+    for (int i = 0; i < PAGING_MAX_SYMTBL_SZ; i++)
+    {
+      if (proc->mm->symrgtbl[i].rg_start == -1 &&
+          proc->mm->symrgtbl[i].rg_end == -1)
+      {
+        free_id = i;
+        break;
+      }
+    }
+  }
+
+  if (free_id == -1)
+    return -1;
+
+  if (__alloc(proc, 0, free_id, size, &addr) == 0)
+  {
+    proc->regs[reg_index] = addr;
+  }
+#ifdef IODUMP
+  printf("===== PHYSICAL MEMORY AFTER ALLOCATION =====\n");
+  printf("PID=%d - Allocated at Region ID=%d (addr=%d)\n", proc->pid, free_id, addr);
+#ifdef PAGETBL_DUMP
+  print_pgtbl(proc, 0, -1); // In page table
+#endif
+  MEMPHY_dump(proc->mram); // In nội dung RAM
+#endif
 }
 
 /*libfree - PAGING-based free a region memory
@@ -196,13 +227,54 @@ int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
  *@size: allocated size
  *@reg_index: memory region ID (used to identify variable in symbole table)
  */
-
 int libfree(struct pcb_t *proc, uint32_t reg_index)
 {
-  /* TODO Implement free region */
+  uint32_t region_id = -1;
 
-  /* By default using vmaid = 0 */
-  return __free(proc, 0, reg_index);
+  if (reg_index >= PAGING_MAX_SYMTBL_SZ)
+    return -1;
+
+  if (proc->mm->symrgtbl[reg_index].rg_start == proc->regs[reg_index])
+  {
+    region_id = reg_index;
+  }
+  else
+  {
+    for (size_t i = 0; i < PAGING_MAX_SYMTBL_SZ; i++)
+    {
+      if (proc->mm->symrgtbl[i].rg_start == proc->regs[reg_index] &&
+          proc->mm->symrgtbl[i].rg_end > proc->mm->symrgtbl[i].rg_start)
+      {
+        region_id = i;
+        break;
+      }
+    }
+  }
+
+  if (region_id == -1)
+    return -1;
+
+  int result = __free(proc, 0, region_id);
+
+  if (result == 0)
+  {
+    proc->regs[reg_index] = -1;
+
+#ifdef IODUMP
+    printf("===== PHYSICAL MEMORY AFTER DEALLOCATION =====\n");
+    printf("PID=%d - Freed Region ID=%d (Virtual [%d - %d])\n",
+           proc->pid,
+           region_id,
+           proc->mm->symrgtbl[region_id].rg_start,
+           proc->mm->symrgtbl[region_id].rg_end);
+#ifdef PAGETBL_DUMP
+    print_pgtbl(proc, 0, -1);
+#endif
+    MEMPHY_dump(proc->mram);
+#endif
+  }
+
+  return result;
 }
 
 /*pg_getpage - get the page in ram
@@ -377,7 +449,8 @@ int libread(
   int val = __read(proc, 0, source, offset, &data);
 
   /* TODO update result of reading action*/
-  // destination
+  *destination = val;
+
 #ifdef IODUMP
   printf("read region=%d offset=%d value=%d\n", source, offset, data);
 #ifdef PAGETBL_DUMP
