@@ -67,7 +67,7 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
   // newrg->rg_start = ...
   // newrg->rg_end = ...
   */
-  newrg->rg_start = cur_vma->vm_end;
+  newrg->rg_start = cur_vma->sbrk;
   newrg->rg_end = newrg->rg_start + alignedsz; // SELF NOTE: alignedsz is the aligned size, so I use it instead of size
 
   return newrg;
@@ -85,15 +85,7 @@ int validate_overlap_vm_area(struct pcb_t *caller, int vmaid, int vmastart, int 
   struct vm_area_struct *vma = caller->mm->mmap;
 
   /* TODO validate the planned memory area is not overlapped */
-  while (vma)
-  {
-    // Check if new region overlaps with any existing VMA
-    if (!(vma->vm_end < vmastart || vma->vm_start > vmaend)) // SELF NOTE: every other case except this is overlap
-    {
-      return -1; // overlap
-    }
-    vma = vma->vm_next;
-  }
+
   return 0; // no overlap
 }
 
