@@ -19,10 +19,12 @@ int init_pte(uint32_t *pte,
              int swptyp, // swap type
              int swpoff) // swap offset
 {
-  if (pre != 0) {
-    if (swp == 0) { // Non swap ~ page online
+  if (pre != 0)
+  {
+    if (swp == 0)
+    { // Non swap ~ page online
       if (fpn == 0)
-        return -1;  // Invalid setting
+        return -1; // Invalid setting
 
       /* Valid setting with FPN */
       SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
@@ -86,11 +88,11 @@ int vmap_page_range(struct pcb_t *caller,           // process call
                     struct framephy_struct *frames, // list of the mapped frames
                     struct vm_rg_struct *ret_rg)    // return mapped region, the real mapped fp
 {                                                   // no guarantee all given pages are mapped
-  //struct framephy_struct *fpit;
+  // struct framephy_struct *fpit;
   int pgit = 0;
   int pgn = PAGING_PGN(addr);
 
-  /* TODO: update the rg_end and rg_start of ret_rg 
+  /* TODO: update the rg_end and rg_start of ret_rg
   //ret_rg->rg_end =  ....
   //ret_rg->rg_start = ...
   //ret_rg->vmaid = ...
@@ -120,15 +122,15 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
   int pgit, fpn;
   struct framephy_struct *newfp_str = NULL;
 
-  /* TODO: allocate the page 
+  /* TODO: allocate the page
   //caller-> ...
   //frm_lst-> ...
   */
 
   for (pgit = 0; pgit < req_pgnum; pgit++)
   {
-  /* TODO: allocate the page 
-   */
+    /* TODO: allocate the page
+     */
     if (MEMPHY_get_freefp(caller->mram, &fpn) == 0)
     {
       newfp_str->fpn = fpn;
@@ -227,13 +229,20 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
   enlist_vm_rg_node(&vma0->vm_freerg_list, first_rg);
 
   /* TODO update VMA0 next */
-  // vma0->next = ...
+  vma0->vm_next = NULL;
 
   /* Point vma owner backward */
-  vma0->vm_mm = mm; 
+  vma0->vm_mm = mm;
 
   /* TODO: update mmap */
-  //mm->mmap = ...
+  mm->mmap = vma0;
+
+  for (size_t i = 0; i < PAGING_MAX_SYMTBL_SZ; i++)
+  {
+    mm->symrgtbl[i].rg_start = -1;
+    mm->symrgtbl[i].rg_end = -1;
+    mm->symrgtbl[i].rg_next = NULL;
+  }
 
   return 0;
 }
@@ -273,7 +282,11 @@ int print_list_fp(struct framephy_struct *ifp)
   struct framephy_struct *fp = ifp;
 
   printf("print_list_fp: ");
-  if (fp == NULL) { printf("NULL list\n"); return -1;}
+  if (fp == NULL)
+  {
+    printf("NULL list\n");
+    return -1;
+  }
   printf("\n");
   while (fp != NULL)
   {
@@ -289,7 +302,11 @@ int print_list_rg(struct vm_rg_struct *irg)
   struct vm_rg_struct *rg = irg;
 
   printf("print_list_rg: ");
-  if (rg == NULL) { printf("NULL list\n"); return -1; }
+  if (rg == NULL)
+  {
+    printf("NULL list\n");
+    return -1;
+  }
   printf("\n");
   while (rg != NULL)
   {
@@ -305,7 +322,11 @@ int print_list_vma(struct vm_area_struct *ivma)
   struct vm_area_struct *vma = ivma;
 
   printf("print_list_vma: ");
-  if (vma == NULL) { printf("NULL list\n"); return -1; }
+  if (vma == NULL)
+  {
+    printf("NULL list\n");
+    return -1;
+  }
   printf("\n");
   while (vma != NULL)
   {
@@ -319,7 +340,11 @@ int print_list_vma(struct vm_area_struct *ivma)
 int print_list_pgn(struct pgn_t *ip)
 {
   printf("print_list_pgn: ");
-  if (ip == NULL) { printf("NULL list\n"); return -1; }
+  if (ip == NULL)
+  {
+    printf("NULL list\n");
+    return -1;
+  }
   printf("\n");
   while (ip != NULL)
   {
@@ -345,7 +370,11 @@ int print_pgtbl(struct pcb_t *caller, uint32_t start, uint32_t end)
   pgn_end = PAGING_PGN(end);
 
   printf("print_pgtbl: %d - %d", start, end);
-  if (caller == NULL) { printf("NULL caller\n"); return -1;}
+  if (caller == NULL)
+  {
+    printf("NULL caller\n");
+    return -1;
+  }
   printf("\n");
 
   for (pgit = pgn_start; pgit < pgn_end; pgit++)
