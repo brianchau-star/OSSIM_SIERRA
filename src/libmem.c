@@ -521,8 +521,14 @@ int free_pcb_memph(struct pcb_t *caller)
  */
 int find_victim_page(struct mm_struct *mm, int *retpgn)
 {
+
+  if (mm->fifo_pgn != -1)
+    return -1; // there is no space exits in ram
+
   struct pgn_t *pg = mm->fifo_pgn;
 
+  *retpgn = pg->pgn;
+  mm->fifo_pgn = mm->fifo_pgn->pg_next;
   /* TODO: Implement the theorical mechanism to find the victim page */
 
   free(pg);
