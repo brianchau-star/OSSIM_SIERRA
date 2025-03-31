@@ -16,14 +16,8 @@ void enqueue(struct queue_t *q, struct pcb_t *proc)
         {
                 return;
         }
-        int index = q->size - 1;
-        while (index >= 0 && proc->prio < q->proc[index]->prio)
-        {
-                q->proc[index + 1] = q->proc[index];
-                index--;
-        }
-        q->proc[index + 1] = proc;
-        q->size += 1;
+        q->proc[q->size] = proc;
+        q->size++;
 }
 
 struct pcb_t *dequeue(struct queue_t *q)
