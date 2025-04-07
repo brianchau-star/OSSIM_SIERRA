@@ -120,8 +120,8 @@ int vmap_page_range(struct pcb_t *caller,           // process call
 int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struct **frm_lst)
 {
   int pgit, fpn;
-  struct framephy_struct *newfp_str = NULL;
-
+  struct framephy_struct *newfp_str = NULL; // pointer to a frame node
+  struct framephy_struct *prev_fp = NULL;   // pointer to the last frame node we have just link in
   /* TODO: allocate the page
   //caller-> ...
   //frm_lst-> ...
@@ -131,12 +131,36 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
   {
     /* TODO: allocate the page
      */
-    if (MEMPHY_get_freefp(caller->mram, &fpn) == 0)
+    if (MEMPHY_get_freefp(caller->mram, &fpn) == 0) // get the free frame out, and get its fpn
     {
+      newfp_str = malloc(sizeof(struct framephy_struct)); // alloc a frame node
       newfp_str->fpn = fpn;
+      newfp_str->owner = caller->mm;
+      newfp_str->fp_next = NULL;
+
+      if (*frm_lst == NULL)
+      {
+        *frm_lst = newfp_str; // if the fisrt node, so the head would be it
+      }
+      else
+      {
+        prev_fp->fp_next = newfp_str; // else, link the new node by prev_fp
+      }
+      prev_fp = newfp_str; // update the prev
     }
     else
     { // TODO: ERROR CODE of obtaining somes but not enough frames
+      // free the frm_lst
+      struct framephy_struct *fp = *frm_lst;
+      while (fp != NULL)
+      {
+        struct framephy_struct *next = fp->fp_next;
+        MEMPHY_put_freefp(caller->mram, fp->fpn); // put the frame with the fpn back
+        free(fp);
+        fp = next;
+      }
+      *frm_lst = NULL;
+      return -3000; // Out of memory
     }
   }
 
