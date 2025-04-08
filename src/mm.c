@@ -84,6 +84,7 @@ int pte_set_fpn(uint32_t *pte, int fpn)
 /*
  * vmap_page_range - map a range of page at aligned address
  */
+//
 int vmap_page_range(struct pcb_t *caller,           // process call
                     int addr,                       // start address which is aligned to pagesz
                     int pgnum,                      // num of mapping page
@@ -97,9 +98,25 @@ int vmap_page_range(struct pcb_t *caller,           // process call
   /* TODO: update the rg_end and rg_start of ret_rg
   //ret_rg->rg_end =  ....
   //ret_rg->rg_start = ...
-  //ret_rg->vmaid = ...
+  // ret_rg->vmaid = ...
   */
+  ret_rg->rg_start = addr;
+  ret_rg->rg_end = addr + pgnum * PAGING_PAGESZ;
 
+  for (; pgit < pgnum && frames; pgit++)
+  {
+    pte_set_fpn(&caller->mm->pgd[pgn + pgit], frames->fpn);
+    pte_set_present(&caller->mm->pgd[pgn + pgit]);
+    enlist_pgn_node(&caller->mm->fifo_pgn, pgn + pgit);
+
+    frames = frames->fp_next;
+  }
+  // this means this function cannot map all page into ram
+  if (pgit != pgnum)
+  {
+    return -1;
+  }
+  return 0;
   /* TODO map range of frame to address space
    *      [addr to addr + pgnum*PAGING_PAGESZ
    *      in page table caller->mm->pgd[]
@@ -107,9 +124,6 @@ int vmap_page_range(struct pcb_t *caller,           // process call
 
   /* Tracking for later page replacement activities (if needed)
    * Enqueue new usage page */
-  enlist_pgn_node(&caller->mm->fifo_pgn, pgn + pgit);
-
-  return 0;
 }
 
 void free_frm_lst(struct framephy_struct **frm_lst, struct memphy_struct *mp)
