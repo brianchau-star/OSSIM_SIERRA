@@ -286,46 +286,65 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
  */
 int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
 {
+  // first of all we need to check the page present or not
   uint32_t pte = mm->pgd[pgn];
-
-  if (!PAGING_PAGE_PRESENT(pte))
+  if (PAGING_PAGE_PRESENT(pte))
   {
-    int vicpgn, swpfpn;
-    int vicfpn;
-    uint32_t vicpte;
-
-    int tgtfpn = PAGING_PTE_SWP(pte);
-
-    find_victim_page(caller->mm, &vicpgn);
-    vicpte = mm->pgd[vicpgn];
-    vicfpn = PAGING_FPN(vicpte);
-    MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
-
-    struct sc_regs regs0;
-    regs0.a1 = SYSMEM_SWP_OP;
-    regs0.a2 = vicfpn;
-    regs0.a3 = swpfpn;
-    syscall(caller, 17, &regs0);
-
-    struct sc_regs regs1;
-    regs1.a1 = SYSMEM_SWP_OP;
-    regs1.a2 = tgtfpn;
-    regs1.a3 = vicfpn;
-    syscall(caller, 17, &regs1);
-
-    pte_set_swap(&mm->pgd[vicpgn], PAGING_PTE_SWPTYP(mm->pgd[pgn]), swpfpn);
-    pte_clear_present(&mm->pgd[vicpgn]);
-
-    pte_set_fpn(&mm->pgd[pgn], vicfpn);
-    pte_set_present(&mm->pgd[pgn]);
-
-    *fpn = vicfpn;
-
-    enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
+    *fpn = PAGING_FPN(pte);
   }
   else
   {
-    *fpn = PAGING_FPN(mm->pgd[pgn]);
+    // it means the page  dont have the physical memory in ram
+    //  @Nhan: I consider two cases happen, first the physcical memory had not been allocated yet.
+    //  So we need to check if ram have enough space for allocation, we will do it
+    //  othrerwise if ram have no space, we will SWAP for swap in and swap out
+    int vicpgn, vicfpn, swpfpn;
+    int tgtfpn = PAGING_PTE_SWP(pte);
+    int freefpn;
+    if (MEMPHY_get_freefp(caller->mram, &freefpn) != -1)
+    {
+      __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, freefpn);
+      pte_set_fpn(&mm->pgd[pgn], freefpn);
+      pte_set_present(&mm->pgd[pgn]);
+      *fpn = freefpn;
+      enlist_pgn_node(&mm->fifo_pgn, pgn); // 💥 add to FIFO after allocation
+      printf("Have enough space for allocation!");
+    }
+    // this means when we dont have enough memory for allocation!
+    else
+    {
+      // first of all we need to find where exactly our pages is
+      // We know that in the structure of pte when swapped = 1
+      // we have the swptype and swpoffset
+      // which actualy means swptype is the region, and swpoffset is actual index in that region
+      // because the swap ad ram have same struct memphy ....
+      if (find_victim_page(caller->mm, &vicpgn) < 0)
+      {
+        return -1;
+      }
+
+      vicfpn = PAGING_FPN(mm->pgd[vicpgn]);
+      if (MEMPHY_get_freefp(caller->active_mswp, &swpfpn) < 0)
+      {
+        printf("There is no space in swap\n"); // for debuging
+        return -1;
+      }
+      // swap the victim fpn to the swp at the location swpfpn
+      __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
+      __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
+      //@Nhan:
+      // after swap we need to modify the pte to let the page table know that the vicfpn is not actualy in ram
+      //  but it has been stored in swp
+      // about the swptype i could be wrong, the right way is determine exactly what page number of swpfpn;
+      // but im too lazy for figuring out this :)).
+      pte_set_swap(&mm->pgd[vicpgn], PAGING_PTE_SWPTYP(mm->pgd[pgn]), swpfpn);
+      pte_clear_present(&mm->pgd[vicpgn]);
+
+      pte_set_fpn(&mm->pgd[pgn], vicfpn);
+      pte_set_present(&mm->pgd[pgn]);
+      *fpn = vicfpn;
+      enlist_pgn_node(&mm->fifo_pgn, pgn); // 💥 add to FIFO after swap-in
+    }
   }
 
   return 0;
@@ -522,8 +541,8 @@ int free_pcb_memph(struct pcb_t *caller)
 int find_victim_page(struct mm_struct *mm, int *retpgn)
 {
 
-  if (mm->fifo_pgn != -1)
-    return -1; // there is no space exits in ram
+  if (mm->fifo_pgn == NULL)
+    return -1;
 
   struct pgn_t *pg = mm->fifo_pgn;
 
