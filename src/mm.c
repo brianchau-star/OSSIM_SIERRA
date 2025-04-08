@@ -5,6 +5,8 @@
  */
 
 #include "mm.h"
+#include "syscall.h"
+#include "libmem.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -55,10 +57,10 @@ int init_pte(uint32_t *pte,
  */
 int pte_set_swap(uint32_t *pte, int swptyp, int swpoff)
 {
-  SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
-  SETBIT(*pte, PAGING_PTE_SWAPPED_MASK);
+  CLRBIT(*pte, PAGING_PTE_PRESENT_MASK); // clear present bit
+  SETBIT(*pte, PAGING_PTE_SWAPPED_MASK); // set swap bit
 
-  SETVAL(*pte, swptyp, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT);
+  SETVAL(*pte, swptyp, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT); // replace bits 0-4 of pte by swptype
   SETVAL(*pte, swpoff, PAGING_PTE_SWPOFF_MASK, PAGING_PTE_SWPOFF_LOBIT);
 
   return 0;
@@ -71,8 +73,8 @@ int pte_set_swap(uint32_t *pte, int swptyp, int swpoff)
  */
 int pte_set_fpn(uint32_t *pte, int fpn)
 {
-  SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
-  CLRBIT(*pte, PAGING_PTE_SWAPPED_MASK);
+  SETBIT(*pte, PAGING_PTE_PRESENT_MASK); // set present bit
+  CLRBIT(*pte, PAGING_PTE_SWAPPED_MASK); // clear swap bit
 
   SETVAL(*pte, fpn, PAGING_PTE_FPN_MASK, PAGING_PTE_FPN_LOBIT);
 
@@ -110,6 +112,18 @@ int vmap_page_range(struct pcb_t *caller,           // process call
   return 0;
 }
 
+void free_frm_lst(struct framephy_struct **frm_lst, struct memphy_struct *mp)
+{
+  struct framephy_struct *delFp = *frm_lst;
+  while (delFp != NULL)
+  {
+    struct framephy_struct *next = delFp->fp_next;
+    MEMPHY_put_freefp(mp, delFp->fpn);
+    free(delFp);
+    delFp = next;
+  }
+  *frm_lst = NULL;
+}
 /*
  * alloc_pages_range - allocate req_pgnum of frame in ram
  * @caller    : caller
@@ -126,42 +140,49 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
   //caller-> ...
   //frm_lst-> ...
   */
-
   for (pgit = 0; pgit < req_pgnum; pgit++)
   {
     /* TODO: allocate the page
      */
-    if (MEMPHY_get_freefp(caller->mram, &fpn) == 0) // get the free frame out, and get its fpn
-    {
-      newfp_str = malloc(sizeof(struct framephy_struct)); // alloc a frame node
-      newfp_str->fpn = fpn;
-      newfp_str->owner = caller->mm;
-      newfp_str->fp_next = NULL;
-
-      if (*frm_lst == NULL)
-      {
-        *frm_lst = newfp_str; // if the fisrt node, so the head would be it
-      }
-      else
-      {
-        prev_fp->fp_next = newfp_str; // else, link the new node by prev_fp
-      }
-      prev_fp = newfp_str; // update the prev
-    }
+    if (MEMPHY_get_freefp(caller->mram, &fpn) == 0)
+      ; // get the free frame out, and get its fpn
     else
     { // TODO: ERROR CODE of obtaining somes but not enough frames
-      // free the frm_lst
-      struct framephy_struct *fp = *frm_lst;
-      while (fp != NULL)
+      // swap data from busy frames to SWAP to have free frames
+      int vicpgn;
+      if (find_victim_page(caller->mram, &vicpgn) != 0)
       {
-        struct framephy_struct *next = fp->fp_next;
-        MEMPHY_put_freefp(caller->mram, fp->fpn); // put the frame with the fpn back
-        free(fp);
-        fp = next;
+        // free the frm_lst
+        free_frm_lst(frm_lst, caller->mram);
+        return -1;
       }
-      *frm_lst = NULL;
-      return -3000; // Out of memory
+      int vicfpn = PAGING_FPN(caller->mm->pgd[vicpgn]);
+      int swpfpn;
+      if (MEMPHY_get_freefp(caller->active_mswp, &swpfpn) != 0)
+      {
+        // free the frm_lst
+        free_frm_lst(frm_lst, caller->mram);
+        return -3000; // there is no frame left in RAM nor SWAP
+      }
+      struct sc_regs regs;
+      regs.a1 = SYSMEM_SWP_OP;
+      regs.a2 = vicfpn;
+      regs.a3 = swpfpn;
+      syscall(caller, 17, &regs);
+      pte_set_swap(caller->mm->pgd[vicpgn], 0, swpfpn);
+      fpn = vicfpn;
     }
+    // make new frame node
+    newfp_str = malloc(sizeof(struct framephy_struct)); // alloc a frame node
+    newfp_str->fpn = fpn;
+    newfp_str->owner = caller->mm;
+    newfp_str->fp_next = NULL;
+    // link node to frm_lst
+    if (*frm_lst == NULL)
+      *frm_lst = newfp_str; // if the fisrt node, so the head would be it
+    else
+      prev_fp->fp_next = newfp_str; // else, link the new node by prev_fp
+    prev_fp = newfp_str;            // update the prev
   }
 
   return 0;
