@@ -313,12 +313,31 @@ int enlist_vm_rg_node(struct vm_rg_struct **rglist, struct vm_rg_struct *rgnode)
 
 int enlist_pgn_node(struct pgn_t **plist, int pgn)
 {
-  struct pgn_t *pnode = malloc(sizeof(struct pgn_t));
+  //@Nhan: this function has been refactored to support LRU Algorithm;
+  struct pgn_t *curr = *plist;
+  struct pgn_t *prev = NULL;
+  while (curr)
+  {
+    if (curr->pgn == pgn)
+    {
+      if (prev == NULL)
+      {
+        return 0;
+      }
+      prev->pg_next = curr->pg_next;
+    }
+    prev = curr;
+    curr = curr->pg_next;
+  }
 
-  pnode->pgn = pgn;
-  pnode->pg_next = *plist;
-  *plist = pnode;
+  if (curr == NULL)
+  {
+    curr = malloc(sizeof(struct pgn_t));
+    curr->pgn = pgn;
+  }
 
+  curr->pg_next = *plist;
+  *plist = curr;
   return 0;
 }
 

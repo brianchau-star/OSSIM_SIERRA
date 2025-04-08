@@ -540,18 +540,30 @@ int free_pcb_memph(struct pcb_t *caller)
  */
 int find_victim_page(struct mm_struct *mm, int *retpgn)
 {
-
-  if (mm->fifo_pgn == NULL)
-    return -1;
-
+  // TODO
+  // At this we implement LRU algorithm, because due to statictis the LRU have high hit rate comparing to each others
+  //@Nhan i using the implement of LRU algorithm to find the victim page
+  //  that means "LEAST RECENTY USED"
+  //  used the list to obtain the least use by removing the last element of the list, and assing it to retpgn
   struct pgn_t *pg = mm->fifo_pgn;
-
-  *retpgn = pg->pgn;
-  mm->fifo_pgn = mm->fifo_pgn->pg_next;
-  /* TODO: Implement the theorical mechanism to find the victim page */
-
-  free(pg);
-
+  if (pg == NULL)
+  {
+    return -1;
+  }
+  if (pg->pg_next == NULL)
+  {
+    *retpgn = pg->pgn;
+    free(pg);
+    mm->fifo_pgn = NULL;
+    return 0;
+  }
+  while (pg->pg_next->pg_next)
+  {
+    pg = pg->pg_next;
+  }
+  *retpgn = pg->pg_next;
+  free(pg->pg_next);
+  pg->pg_next = NULL;
   return 0;
 }
 
