@@ -106,7 +106,6 @@ int vmap_page_range(struct pcb_t *caller,           // process call
   for (; pgit < pgnum && frames; pgit++)
   {
     pte_set_fpn(&caller->mm->pgd[pgn + pgit], frames->fpn);
-    pte_set_present(&caller->mm->pgd[pgn + pgit]);
     enlist_pgn_node(&caller->mm->fifo_pgn, pgn + pgit);
 
     frames = frames->fp_next;
@@ -145,6 +144,25 @@ void free_frm_lst(struct framephy_struct **frm_lst, struct memphy_struct *mp)
  * @frm_lst   : frame list
  */
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ * Nhan's comment on Tuan Anh's implementation:
+ *
+ * This function aims to allocate the requested number of pages (req_pgnum) in RAM.
+ * However, what happens if the total available RAM is smaller than the requested number of pages?
+ *
+ * If the number of frames in RAM is sufficient to accommodate the requested pages,
+ * the function can use page replacement (swap) to free up space when RAM is full.
+ * But, if the **maximum size of RAM** is less than the requested number of pages,
+ * swapping some pages won't be enough to fulfill the request. In that case, the pages
+ * that the function tries to allocate cannot all reside in RAM.
+ *
+ * My suggestion: Before proceeding with page allocation, we should first check if the
+ * available frames in RAM are less than the requested number. If they are, we should
+ * immediately return -1, indicating that it's impossible to allocate the requested pages.
+ *
+ * --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ */
+
 int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struct **frm_lst)
 {
   int pgit, fpn;
@@ -154,6 +172,15 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
   //caller-> ...
   //frm_lst-> ...
   */
+
+  // oke first we neek to check maximum frames larger than req_pgnum or not
+  int maxium_frames = caller->mram->maxsz / PAGING_PAGESZ;
+
+  if (req_pgnum > maxium_frames)
+  {
+    printf("Cannot allocated due to the insufficent size of RAM");
+    return -1;
+  }
   for (pgit = 0; pgit < req_pgnum; pgit++)
   {
     /* TODO: allocate the page
@@ -183,7 +210,7 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
       regs.a2 = vicfpn;
       regs.a3 = swpfpn;
       syscall(caller, 17, &regs);
-      pte_set_swap(caller->mm->pgd[vicpgn], 0, swpfpn);
+      pte_set_swap(&caller->mm->pgd[vicpgn], 0, swpfpn);
       fpn = vicfpn;
     }
     // make new frame node
@@ -196,7 +223,8 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
       *frm_lst = newfp_str; // if the fisrt node, so the head would be it
     else
       prev_fp->fp_next = newfp_str; // else, link the new node by prev_fp
-    prev_fp = newfp_str;            // update the prev
+
+    prev_fp = newfp_str; // update the prev
   }
 
   return 0;
