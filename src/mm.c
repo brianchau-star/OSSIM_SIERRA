@@ -191,7 +191,7 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
     { // TODO: ERROR CODE of obtaining somes but not enough frames
       // swap data from busy frames to SWAP to have free frames
       int vicpgn;
-      if (find_victim_page(caller->mram, &vicpgn) != 0)
+      if (find_victim_page(caller->mm, &vicpgn) != 0)
       {
         // free the frm_lst
         free_frm_lst(frm_lst, caller->mram);

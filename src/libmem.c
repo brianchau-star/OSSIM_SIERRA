@@ -305,7 +305,7 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
     {
       __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, freefpn);
       pte_set_fpn(&mm->pgd[pgn], freefpn);
-      pte_set_present(&mm->pgd[pgn]);
+      // pte_set_present(&mm->pgd[pgn]);
       *fpn = freefpn;
       enlist_pgn_node(&mm->fifo_pgn, pgn); // 💥 add to FIFO after allocation
       printf("Have enough space for allocation!");
@@ -338,10 +338,10 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
       // about the swptype i could be wrong, the right way is determine exactly what page number of swpfpn;
       // but im too lazy for figuring out this :)).
       pte_set_swap(&mm->pgd[vicpgn], PAGING_PTE_SWPTYP(mm->pgd[pgn]), swpfpn);
-      pte_clear_present(&mm->pgd[vicpgn]);
+      // pte_clear_present(&mm->pgd[vicpgn]);
 
       pte_set_fpn(&mm->pgd[pgn], vicfpn);
-      pte_set_present(&mm->pgd[pgn]);
+      // pte_set_present(&mm->pgd[pgn]);
       *fpn = vicfpn;
       enlist_pgn_node(&mm->fifo_pgn, pgn); // 💥 add to FIFO after swap-in
     }
@@ -375,7 +375,7 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller)
   struct sc_regs regs;
   regs.a1 = SYSMEM_IO_READ;
   regs.a2 = addr;
-  regs.a3 = data;
+  regs.a3 = *data;
 
   /* SYSCALL 17 sys_memmap */
   syscall(caller, 17, &regs);
@@ -561,7 +561,7 @@ int find_victim_page(struct mm_struct *mm, int *retpgn)
   {
     pg = pg->pg_next;
   }
-  *retpgn = pg->pg_next;
+  *retpgn = pg->pg_next->pgn;
   free(pg->pg_next);
   pg->pg_next = NULL;
   return 0;
