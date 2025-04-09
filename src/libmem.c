@@ -70,6 +70,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
 {
   /*Allocate at the toproof */
   struct vm_rg_struct rgnode;
+  int inc_limit_ret; // new sbrk
 
   /* TODO: commit the vmaid */
   // rgnode.vmaid
@@ -90,25 +91,30 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   {
     struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
     int inc_sz = PAGING_PAGE_ALIGNSZ(size);
-    int inc_limit_ret;
-    int old_sbrk = cur_vma->sbrk;
-    struct sc_regs regs;
-    regs.a1 = SYSMEM_INC_OP;
-    regs.a2 = vmaid;
-    regs.a3 = inc_sz;
-
-    syscall(caller, 17, &regs);
-    // alloc_addr = &old_sbrk;
-    if (get_free_vmrg_area(caller, vmaid, size, &rgnode) != 0)
+    if (cur_vma->vm_end - cur_vma->sbrk + 1 < inc_sz)
     {
-      pthread_mutex_unlock(&mmvm_lock);
-      return -1;
+
+      int old_sbrk = cur_vma->sbrk;
+      struct sc_regs regs;
+      regs.a1 = SYSMEM_INC_OP;
+      regs.a2 = vmaid;
+      regs.a3 = inc_sz;
+
+      syscall(caller, 17, &regs);
+      // alloc_addr = &old_sbrk;
+      // if (get_free_vmrg_area(caller, vmaid, size, &rgnode) != 0)
+      // {
+      //   pthread_mutex_unlock(&mmvm_lock);
+      //   return -1;
+      // }
     }
+    rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, inc_sz);
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
+    
     *alloc_addr = rgnode.rg_start;
 
-    cur_vma->sbrk += inc_sz;
+    cur_vma->sbrk = rgnode.rg_end;
     inc_limit_ret = cur_vma->sbrk;
   }
   /* TODO retrive current vma if needed, current comment out due to compiler redundant warning*/
