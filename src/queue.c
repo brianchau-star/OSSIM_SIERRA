@@ -22,21 +22,26 @@ void enqueue(struct queue_t *q, struct pcb_t *proc)
 
 struct pcb_t *dequeue(struct queue_t *q)
 {
-        /* TODO: return a pcb whose prioprity is the highest
-         * in the queue [q] and remember to remove it from q
-         * */
-
         if (q == NULL || q->size == 0)
-        {
                 return NULL;
-        }
+
+#ifdef MLQ_SCHED
         struct pcb_t *proc = q->proc[0];
-
-        for (int index = 1; index < q->size; index++)
-        {
-                q->proc[index - 1] = q->proc[index];
-        }
-        q->size -= 1;
-
+        for (int i = 1; i < q->size; i++)
+                q->proc[i - 1] = q->proc[i];
+        q->size--;
         return proc;
+#else
+        int best = 0;
+        for (int i = 1; i < q->size; i++)
+        {
+                if (q->proc[i]->prio < q->proc[best]->prio)
+                        best = i;
+        }
+        struct pcb_t *proc = q->proc[best];
+        for (int i = best + 1; i < q->size; i++)
+                q->proc[i - 1] = q->proc[i];
+        q->size--;
+        return proc;
+#endif
 }
