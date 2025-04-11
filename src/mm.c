@@ -5,6 +5,8 @@
  */
 
 #include "mm.h"
+#include "syscall.h"
+#include "libmem.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -19,10 +21,12 @@ int init_pte(uint32_t *pte,
              int swptyp, // swap type
              int swpoff) // swap offset
 {
-  if (pre != 0) {
-    if (swp == 0) { // Non swap ~ page online
+  if (pre != 0)
+  {
+    if (swp == 0)
+    { // Non swap ~ page online
       if (fpn == 0)
-        return -1;  // Invalid setting
+        return -1; // Invalid setting
 
       /* Valid setting with FPN */
       SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
@@ -53,10 +57,10 @@ int init_pte(uint32_t *pte,
  */
 int pte_set_swap(uint32_t *pte, int swptyp, int swpoff)
 {
-  SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
-  SETBIT(*pte, PAGING_PTE_SWAPPED_MASK);
+  CLRBIT(*pte, PAGING_PTE_PRESENT_MASK); // clear present bit
+  SETBIT(*pte, PAGING_PTE_SWAPPED_MASK); // set swap bit
 
-  SETVAL(*pte, swptyp, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT);
+  SETVAL(*pte, swptyp, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT); // replace bits 0-4 of pte by swptype
   SETVAL(*pte, swpoff, PAGING_PTE_SWPOFF_MASK, PAGING_PTE_SWPOFF_LOBIT);
 
   return 0;
@@ -69,8 +73,8 @@ int pte_set_swap(uint32_t *pte, int swptyp, int swpoff)
  */
 int pte_set_fpn(uint32_t *pte, int fpn)
 {
-  SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
-  CLRBIT(*pte, PAGING_PTE_SWAPPED_MASK);
+  SETBIT(*pte, PAGING_PTE_PRESENT_MASK); // set present bit
+  CLRBIT(*pte, PAGING_PTE_SWAPPED_MASK); // clear swap bit
 
   SETVAL(*pte, fpn, PAGING_PTE_FPN_MASK, PAGING_PTE_FPN_LOBIT);
 
@@ -80,22 +84,38 @@ int pte_set_fpn(uint32_t *pte, int fpn)
 /*
  * vmap_page_range - map a range of page at aligned address
  */
+//
 int vmap_page_range(struct pcb_t *caller,           // process call
                     int addr,                       // start address which is aligned to pagesz
                     int pgnum,                      // num of mapping page
                     struct framephy_struct *frames, // list of the mapped frames
                     struct vm_rg_struct *ret_rg)    // return mapped region, the real mapped fp
 {                                                   // no guarantee all given pages are mapped
-  //struct framephy_struct *fpit;
+  // struct framephy_struct *fpit;
   int pgit = 0;
   int pgn = PAGING_PGN(addr);
 
-  /* TODO: update the rg_end and rg_start of ret_rg 
+  /* TODO: update the rg_end and rg_start of ret_rg
   //ret_rg->rg_end =  ....
   //ret_rg->rg_start = ...
-  //ret_rg->vmaid = ...
+  // ret_rg->vmaid = ...
   */
+  ret_rg->rg_start = addr;
+  ret_rg->rg_end = addr + pgnum * PAGING_PAGESZ;
 
+  for (; pgit < pgnum && frames; pgit++)
+  {
+    pte_set_fpn(&caller->mm->pgd[pgn + pgit], frames->fpn);
+    enlist_pgn_node(&caller->mm->fifo_pgn, pgn + pgit);
+
+    frames = frames->fp_next;
+  }
+  // this means this function cannot map all page into ram
+  if (pgit != pgnum)
+  {
+    return -1;
+  }
+  return 0;
   /* TODO map range of frame to address space
    *      [addr to addr + pgnum*PAGING_PAGESZ
    *      in page table caller->mm->pgd[]
@@ -103,11 +123,20 @@ int vmap_page_range(struct pcb_t *caller,           // process call
 
   /* Tracking for later page replacement activities (if needed)
    * Enqueue new usage page */
-  enlist_pgn_node(&caller->mm->fifo_pgn, pgn + pgit);
-
-  return 0;
 }
 
+void free_frm_lst(struct framephy_struct **frm_lst, struct memphy_struct *mp)
+{
+  struct framephy_struct *delFp = *frm_lst;
+  while (delFp != NULL)
+  {
+    struct framephy_struct *next = delFp->fp_next;
+    MEMPHY_put_freefp(mp, delFp->fpn);
+    free(delFp);
+    delFp = next;
+  }
+  *frm_lst = NULL;
+}
 /*
  * alloc_pages_range - allocate req_pgnum of frame in ram
  * @caller    : caller
@@ -115,27 +144,87 @@ int vmap_page_range(struct pcb_t *caller,           // process call
  * @frm_lst   : frame list
  */
 
+/*--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ * Nhan's comment on Tuan Anh's implementation:
+ *
+ * This function aims to allocate the requested number of pages (req_pgnum) in RAM.
+ * However, what happens if the total available RAM is smaller than the requested number of pages?
+ *
+ * If the number of frames in RAM is sufficient to accommodate the requested pages,
+ * the function can use page replacement (swap) to free up space when RAM is full.
+ * But, if the **maximum size of RAM** is less than the requested number of pages,
+ * swapping some pages won't be enough to fulfill the request. In that case, the pages
+ * that the function tries to allocate cannot all reside in RAM.
+ *
+ * My suggestion: Before proceeding with page allocation, we should first check if the
+ * available frames in RAM are less than the requested number. If they are, we should
+ * immediately return -1, indicating that it's impossible to allocate the requested pages.
+ *
+ * --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ */
+
 int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struct **frm_lst)
 {
   int pgit, fpn;
-  struct framephy_struct *newfp_str = NULL;
-
-  /* TODO: allocate the page 
+  struct framephy_struct *newfp_str = NULL; // pointer to a frame node
+  struct framephy_struct *prev_fp = NULL;   // pointer to the last frame node we have just link in
+  /* TODO: allocate the page
   //caller-> ...
   //frm_lst-> ...
   */
 
+  // oke first we neek to check maximum frames larger than req_pgnum or not
+  int maxium_frames = caller->mram->maxsz / PAGING_PAGESZ;
+
+  if (req_pgnum > maxium_frames)
+  {
+    printf("Cannot allocated due to the insufficent size of RAM");
+    return -1;
+  }
   for (pgit = 0; pgit < req_pgnum; pgit++)
   {
-  /* TODO: allocate the page 
-   */
+    /* TODO: allocate the page
+     */
     if (MEMPHY_get_freefp(caller->mram, &fpn) == 0)
-    {
-      newfp_str->fpn = fpn;
-    }
+      ; // get the free frame out, and get its fpn
     else
     { // TODO: ERROR CODE of obtaining somes but not enough frames
+      // swap data from busy frames to SWAP to have free frames
+      int vicpgn;
+      if (find_victim_page(caller->mm, &vicpgn) != 0)
+      {
+        // free the frm_lst
+        free_frm_lst(frm_lst, caller->mram);
+        return -1;
+      }
+      int vicfpn = PAGING_FPN(caller->mm->pgd[vicpgn]);
+      int swpfpn;
+      if (MEMPHY_get_freefp(caller->active_mswp, &swpfpn) != 0)
+      {
+        // free the frm_lst
+        free_frm_lst(frm_lst, caller->mram);
+        return -3000; // there is no frame left in RAM nor SWAP
+      }
+      struct sc_regs regs;
+      regs.a1 = SYSMEM_SWP_OP;
+      regs.a2 = vicfpn;
+      regs.a3 = swpfpn;
+      syscall(caller, 17, &regs);
+      pte_set_swap(&caller->mm->pgd[vicpgn], 0, swpfpn);
+      fpn = vicfpn;
     }
+    // make new frame node
+    newfp_str = malloc(sizeof(struct framephy_struct)); // alloc a frame node
+    newfp_str->fpn = fpn;
+    newfp_str->owner = caller->mm;
+    newfp_str->fp_next = NULL;
+    // link node to frm_lst
+    if (*frm_lst == NULL)
+      *frm_lst = newfp_str; // if the fisrt node, so the head would be it
+    else
+      prev_fp->fp_next = newfp_str; // else, link the new node by prev_fp
+
+    prev_fp = newfp_str; // update the prev
   }
 
   return 0;
@@ -227,13 +316,20 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
   enlist_vm_rg_node(&vma0->vm_freerg_list, first_rg);
 
   /* TODO update VMA0 next */
-  // vma0->next = ...
+  vma0->vm_next = NULL;
 
   /* Point vma owner backward */
-  vma0->vm_mm = mm; 
+  vma0->vm_mm = mm;
 
   /* TODO: update mmap */
-  //mm->mmap = ...
+  mm->mmap = vma0;
+
+  for (size_t i = 0; i < PAGING_MAX_SYMTBL_SZ; i++)
+  {
+    mm->symrgtbl[i].rg_start = -1;
+    mm->symrgtbl[i].rg_end = -1;
+    mm->symrgtbl[i].rg_next = NULL;
+  }
 
   return 0;
 }
@@ -259,12 +355,31 @@ int enlist_vm_rg_node(struct vm_rg_struct **rglist, struct vm_rg_struct *rgnode)
 
 int enlist_pgn_node(struct pgn_t **plist, int pgn)
 {
-  struct pgn_t *pnode = malloc(sizeof(struct pgn_t));
+  //@Nhan: this function has been refactored to support LRU Algorithm;
+  struct pgn_t *curr = *plist;
+  struct pgn_t *prev = NULL;
+  while (curr)
+  {
+    if (curr->pgn == pgn)
+    {
+      if (prev == NULL)
+      {
+        return 0;
+      }
+      prev->pg_next = curr->pg_next;
+    }
+    prev = curr;
+    curr = curr->pg_next;
+  }
 
-  pnode->pgn = pgn;
-  pnode->pg_next = *plist;
-  *plist = pnode;
+  if (curr == NULL)
+  {
+    curr = malloc(sizeof(struct pgn_t));
+    curr->pgn = pgn;
+  }
 
+  curr->pg_next = *plist;
+  *plist = curr;
   return 0;
 }
 
@@ -273,7 +388,11 @@ int print_list_fp(struct framephy_struct *ifp)
   struct framephy_struct *fp = ifp;
 
   printf("print_list_fp: ");
-  if (fp == NULL) { printf("NULL list\n"); return -1;}
+  if (fp == NULL)
+  {
+    printf("NULL list\n");
+    return -1;
+  }
   printf("\n");
   while (fp != NULL)
   {
@@ -289,7 +408,11 @@ int print_list_rg(struct vm_rg_struct *irg)
   struct vm_rg_struct *rg = irg;
 
   printf("print_list_rg: ");
-  if (rg == NULL) { printf("NULL list\n"); return -1; }
+  if (rg == NULL)
+  {
+    printf("NULL list\n");
+    return -1;
+  }
   printf("\n");
   while (rg != NULL)
   {
@@ -305,7 +428,11 @@ int print_list_vma(struct vm_area_struct *ivma)
   struct vm_area_struct *vma = ivma;
 
   printf("print_list_vma: ");
-  if (vma == NULL) { printf("NULL list\n"); return -1; }
+  if (vma == NULL)
+  {
+    printf("NULL list\n");
+    return -1;
+  }
   printf("\n");
   while (vma != NULL)
   {
@@ -319,7 +446,11 @@ int print_list_vma(struct vm_area_struct *ivma)
 int print_list_pgn(struct pgn_t *ip)
 {
   printf("print_list_pgn: ");
-  if (ip == NULL) { printf("NULL list\n"); return -1; }
+  if (ip == NULL)
+  {
+    printf("NULL list\n");
+    return -1;
+  }
   printf("\n");
   while (ip != NULL)
   {
@@ -345,7 +476,11 @@ int print_pgtbl(struct pcb_t *caller, uint32_t start, uint32_t end)
   pgn_end = PAGING_PGN(end);
 
   printf("print_pgtbl: %d - %d", start, end);
-  if (caller == NULL) { printf("NULL caller\n"); return -1;}
+  if (caller == NULL)
+  {
+    printf("NULL caller\n");
+    return -1;
+  }
   printf("\n");
 
   for (pgit = pgn_start; pgit < pgn_end; pgit++)

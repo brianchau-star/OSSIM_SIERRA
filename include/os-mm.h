@@ -21,7 +21,7 @@ struct pgn_t{
 struct vm_rg_struct {
    unsigned long rg_start;
    unsigned long rg_end;
-
+   unsigned long vmaid;
    struct vm_rg_struct *rg_next;
 };
 
@@ -47,9 +47,9 @@ struct vm_area_struct {
  * Memory management struct
  */
 struct mm_struct {
-   uint32_t *pgd;
+   uint32_t *pgd; // SELF NOTE: page table
 
-   struct vm_area_struct *mmap;
+   struct vm_area_struct *mmap; // SELF NOTE: a pointer to the first vm_area of a linkedlist of vm_area
 
    /* Currently we support a fixed number of symbol */
    struct vm_rg_struct symrgtbl[PAGING_MAX_SYMTBL_SZ];

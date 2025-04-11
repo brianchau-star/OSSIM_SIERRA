@@ -160,9 +160,24 @@ int MEMPHY_get_freefp(struct memphy_struct *mp, int *retfpn)
 
 int MEMPHY_dump(struct memphy_struct *mp)
 {
-  /*TODO dump memphy contnt mp->storage
-   *     for tracing the memory content
-   */
+   /*TODO dump memphy contnt mp->storage
+    *     for tracing the memory content
+    */
+   if (mp == NULL || mp->storage == NULL)
+   {
+      printf("MEMPHY is not initialized.\n");
+      return -1;
+   }
+
+   printf("MEMORY DUMP (Size: %d bytes)\n", mp->maxsz);
+
+   for (int i = 0; i < mp->maxsz; i++)
+   {
+      if (i % 16 == 0)
+         printf("\n0x%04X: ", i); // print base address (hexa 4 digits) of each line after every 16 bytes printed
+
+      printf("0x%02X ", mp->storage[i]); // print bytes in hexa 2 digits
+   }
    return 0;
 }
 
