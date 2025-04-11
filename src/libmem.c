@@ -111,7 +111,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, inc_sz);
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
-    
+
     *alloc_addr = rgnode.rg_start;
 
     cur_vma->sbrk = rgnode.rg_end;
@@ -173,7 +173,7 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
   free_region->rg_start = -1;
   free_region->rg_end = -1;
 
-  struct vm_rg_struct *new_free_area = (struct vm_rg_struct *)malloc(sizeof(struct vm_area_struct));
+  struct vm_rg_struct *new_free_area = (struct vm_rg_struct *)malloc(sizeof(struct vm_rg_struct));
   new_free_area->rg_start = free_start;
   new_free_area->rg_end = free_end;
   new_free_area->vmaid = vmaid;
@@ -191,12 +191,13 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
 int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
 {
   int addr;
-  int free_id = -1;
-
+  int freerg_id = -1;
+  int freerg_vmaid = -1; // @TuanAnh: we also need to update freerg_vmaid to use _alloc()
   if (proc->mm->symrgtbl[reg_index].rg_start == -1 &&
       proc->mm->symrgtbl[reg_index].rg_end == -1)
   {
-    free_id = reg_index;
+    freerg_id = reg_index;
+    freerg_vmaid = proc->mm->symrgtbl[reg_index].vmaid;
   }
   else
   {
@@ -205,26 +206,27 @@ int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
       if (proc->mm->symrgtbl[i].rg_start == -1 &&
           proc->mm->symrgtbl[i].rg_end == -1)
       {
-        free_id = i;
+        freerg_id = i;
+        freerg_vmaid = proc->mm->symrgtbl[i].vmaid;
         break;
       }
     }
   }
 
-  if (free_id == -1)
+  if (freerg_id == -1)
     return -1;
 
-  if (__alloc(proc, 0, free_id, size, &addr) == 0)
+  if (__alloc(proc, freerg_vmaid, freerg_id, size, &addr) == 0)
   {
     proc->regs[reg_index] = addr;
   }
 #ifdef IODUMP
   printf("===== PHYSICAL MEMORY AFTER ALLOCATION =====\n");
-  printf("PID=%d - Allocated at Region ID=%d (addr=%d)\n", proc->pid, free_id, addr);
+  printf("PID=%d - Allocated at Region ID=%d (addr=%d)\n", proc->pid, freerg_id, addr);
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); // In page table
 #endif
-  MEMPHY_dump(proc->mram); // In nội dung RAM
+  // MEMPHY_dump(proc->mram); // In nội dung RAM
 #endif
 }
 
@@ -236,13 +238,14 @@ int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
 int libfree(struct pcb_t *proc, uint32_t reg_index)
 {
   uint32_t region_id = -1;
-
+  uint32_t region_vmaid = -1; // @TuanAnh: we also need to get region_vmaid to use _free()
   if (reg_index >= PAGING_MAX_SYMTBL_SZ)
     return -1;
 
   if (proc->mm->symrgtbl[reg_index].rg_start == proc->regs[reg_index])
   {
     region_id = reg_index;
+    region_vmaid = proc->mm->symrgtbl[reg_index].vmaid;
   }
   else
   {
@@ -252,6 +255,7 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
           proc->mm->symrgtbl[i].rg_end > proc->mm->symrgtbl[i].rg_start)
       {
         region_id = i;
+        region_vmaid = proc->mm->symrgtbl[i].vmaid;
         break;
       }
     }
@@ -260,7 +264,7 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
   if (region_id == -1)
     return -1;
 
-  int result = __free(proc, 0, region_id);
+  int result = __free(proc, region_vmaid, region_id);
 
   if (result == 0)
   {
@@ -276,7 +280,7 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
 #ifdef PAGETBL_DUMP
     print_pgtbl(proc, 0, -1);
 #endif
-    MEMPHY_dump(proc->mram);
+    // MEMPHY_dump(proc->mram);
 #endif
   }
 
@@ -343,7 +347,7 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
       //  but it has been stored in swp
       // about the swptype i could be wrong, the right way is determine exactly what page number of swpfpn;
       // but im too lazy for figuring out this :)).
-      pte_set_swap(&mm->pgd[vicpgn], PAGING_PTE_SWPTYP(mm->pgd[pgn]), swpfpn);
+      pte_set_swap(&mm->pgd[vicpgn], 0, swpfpn);
       // pte_clear_present(&mm->pgd[vicpgn]);
 
       pte_set_fpn(&mm->pgd[pgn], vicfpn);
@@ -381,12 +385,12 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller)
   struct sc_regs regs;
   regs.a1 = SYSMEM_IO_READ;
   regs.a2 = addr;
-  regs.a3 = *data;
+  //regs.a3 = *data; // @TuanAnh: we dont need a3 for SYSTEM_IO_READ
 
   /* SYSCALL 17 sys_memmap */
   syscall(caller, 17, &regs);
   // Update data
-  // data = (BYTE)
+  *data = regs.a3;
 
   return 0;
 }
@@ -465,7 +469,7 @@ int libread(
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); // print max TBL
 #endif
-  MEMPHY_dump(proc->mram);
+  // MEMPHY_dump(proc->mram);
 #endif
 
   return val;
@@ -504,7 +508,7 @@ int libwrite(
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); // print max TBL
 #endif
-  MEMPHY_dump(proc->mram);
+  // MEMPHY_dump(proc->mram);
 #endif
 
   return __write(proc, 0, destination, offset, data);
