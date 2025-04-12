@@ -32,7 +32,7 @@ static enum ins_opcode_t get_opcode(char * opt) {
 	}
 }
 
-struct pcb_t * load(const char * path) {
+struct pcb_t * load(const char * path) { // read proc
 	/* Create new PCB for the new process */
 	struct pcb_t * proc = (struct pcb_t * )malloc(sizeof(struct pcb_t));
 	proc->pid = avail_pid;
@@ -67,8 +67,8 @@ struct pcb_t * load(const char * path) {
 			fscanf(
 				file,
 				"%u %u\n",
-				&proc->code->text[i].arg_0,
-				&proc->code->text[i].arg_1
+				&proc->code->text[i].arg_0, // 300
+				&proc->code->text[i].arg_1 // 0
 			);
 			break;
 		case FREE:
