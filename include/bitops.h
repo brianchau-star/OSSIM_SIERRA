@@ -32,6 +32,6 @@
 #define NBITS8(n) ((n&0xF0)?(4+NBITS4(n>>4)):(NBITS4(n)))
 #define NBITS16(n) ((n&0xFF00)?(8+NBITS8(n>>8)):(NBITS8(n)))
 #define NBITS32(n) ((n&0xFFFF0000)?(16+NBITS16(n>>16)):(NBITS16(n)))
-#define NBITS(n) (n==0?0:NBITS32(n))
+#define NBITS(n) (n==0?0:NBITS32(n)) // return how many bits are just enough to represent the unsigned number n in binary
 
 #define EXTRACT_NBITS(nr, h, l) ((nr&GENMASK(h,l)) >> l)

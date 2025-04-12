@@ -93,7 +93,7 @@ int vmap_page_range(struct pcb_t *caller,           // process call
 {                                                   // no guarantee all given pages are mapped
   // struct framephy_struct *fpit;
   int pgit = 0;
-  int pgn = PAGING_PGN(addr);
+  int pgn = PAGING_PGN(addr); // addr is formated as "CPU addr scheme" which is the address in the virtual/logical addr space
 
   /* TODO: update the rg_end and rg_start of ret_rg
   //ret_rg->rg_end =  ....
@@ -222,9 +222,13 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
     if (*frm_lst == NULL)
       *frm_lst = newfp_str; // if the fisrt node, so the head would be it
     else
-      prev_fp->fp_next = newfp_str; // else, link the new node by prev_fp
+    {
+      // prev_fp->fp_next = newfp_str; // else, link the new node to the last
+      newfp_str->fp_next = *frm_lst; // or, link the new node to the first (like the output)
+    }
 
-    prev_fp = newfp_str; // update the prev
+    // prev_fp = newfp_str; // update the prev
+    *frm_lst = newfp_str; // update frm_lst head
   }
 
   return 0;
@@ -264,11 +268,10 @@ int vm_map_ram(struct pcb_t *caller, int astart, int aend, int mapstart, int inc
 #endif
     return -1;
   }
-
   /* it leaves the case of memory is enough but half in ram, half in swap
    * do the swaping all to swapper to get the all in ram */
   vmap_page_range(caller, mapstart, incpgnum, frm_lst, ret_rg);
-
+  
   return 0;
 }
 
@@ -471,6 +474,7 @@ int print_pgtbl(struct pcb_t *caller, uint32_t start, uint32_t end)
     pgn_start = 0;
     struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, 0);
     end = cur_vma->vm_end;
+    // printf("%d\n", end);
   }
   pgn_start = PAGING_PGN(start);
   pgn_end = PAGING_PGN(end);
@@ -485,9 +489,13 @@ int print_pgtbl(struct pcb_t *caller, uint32_t start, uint32_t end)
 
   for (pgit = pgn_start; pgit < pgn_end; pgit++)
   {
-    printf("%08ld: %08x\n", pgit * sizeof(uint32_t), caller->mm->pgd[pgit]);
+    printf("%08ld: %08x\n", pgit * sizeof(uint32_t), caller->mm->pgd[pgit]); // pte is 4 bytes size, so this print the first address of each pte in pgd
   }
 
+  for (pgit = pgn_start; pgit < pgn_end; pgit++)
+  {
+    printf("Page Number: %d -> Frame Number: %d\n", pgit, PAGING_PTE_FPN(caller->mm->pgd[pgit])); // print the page index in the pgd, and its corresponding fpn
+  }
   return 0;
 }
 
