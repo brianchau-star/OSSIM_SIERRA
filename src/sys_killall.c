@@ -12,23 +12,28 @@
 #include "syscall.h"
 #include "stdio.h"
 #include "libmem.h"
+#include "queue.h"
+#include <string.h>
 
-int __sys_killall(struct pcb_t *caller, struct sc_regs* regs)
+int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
 {
     char proc_name[100];
     uint32_t data;
 
-    //hardcode for demo only
+    // hardcode for demo only
     uint32_t memrg = regs->a1;
-    
+
     /* TODO: Get name of the target proc */
-    //proc_name = libread..
+    // proc_name = libread..
+
     int i = 0;
     data = 0;
-    while(data != -1){
+    while (data != -1)
+    {
         libread(caller, memrg, i, &data);
-        proc_name[i]= data;
-        if(data == -1) proc_name[i]='\0';
+        proc_name[i] = data;
+        if (data == -1)
+            proc_name[i] = '\0';
         i++;
     }
     printf("The procname retrieved from memregionid %d is \"%s\"\n", memrg, proc_name);
@@ -36,13 +41,27 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs* regs)
     /* TODO: Traverse proclist to terminate the proc
      *       stcmp to check the process match proc_name
      */
-    //caller->running_list
-    //caller->mlq_ready_queu
 
-    /* TODO Maching and terminating 
+    // caller->running_list
+    //  caller->mlq_ready_queue
+    for (int prio = 0; prio < MAX_PRIO; prio++)
+    {
+        struct queue_t queue_ne = caller->mlq_ready_queue[prio];
+        if (!empty(&queue_ne))
+        {
+            for (int proc = 0; proc < queue_ne.size; i++)
+            {
+                if (strcmp(queue_ne.proc[i]->path, proc_name))
+                {
+                }
+            }
+        }
+    }
+
+    /* TODO Maching and terminating
      *       all processes with given
      *        name in var proc_name
      */
 
-    return 0; 
+    return 0;
 }
