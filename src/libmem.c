@@ -94,8 +94,18 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     // DEBUG:
     //  printf("cannot get free area\n");
     struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
+    printf("Hello");
+    printf("SBRK: %d  END: %d", cur_vma->sbrk, cur_vma->vm_end);
+
+    // @Nhan: Be careful when using aligned size (inc_sz) to extend sbrk.
+    // Since inc_sz is rounded up to the nearest page size, sbrk may hit vm_end
+    // sooner than expected, even if there’s still technically some space left.
+    // This isn't wrong, but it wastes memory — and over time, we might run out of it.
+    // So in practice, aligning everything may not be the best idea.
+
     int inc_sz = PAGING_PAGE_ALIGNSZ(size);
-    if (cur_vma->vm_end - cur_vma->sbrk + 1 < inc_sz)
+
+    if (cur_vma->vm_end - cur_vma->sbrk + 1 < size)
     {
       int old_sbrk = cur_vma->sbrk;
       struct sc_regs regs;
@@ -113,10 +123,22 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
       // DEBUG:
       // printf("print pgd in alloc 3: ");
       // print_pgtbl(caller, 0, -1); // In page table
+
+      rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, size);
+      caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
+      caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
+
+      *alloc_addr = rgnode.rg_start;
+      // printf("addr in alloc 2: ");
+      // printf("addr: %08x\n", *alloc_addr);
+      cur_vma->sbrk = rgnode.rg_end;
+      inc_limit_ret = cur_vma->sbrk;
+      return 0;
     }
+
     // printf("addr in alloc 1: ");
     // printf("addr: %08x\n", *alloc_addr);
-    rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, inc_sz);
+    rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, size); 
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
 
@@ -512,7 +534,7 @@ int libwrite(
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); // print max TBL
 #endif
-  MEMPHY_dump(proc->mram);
+  // MEMPHY_dump(proc->mram);
 #endif
 
   return __write(proc, 0, destination, offset, data);
