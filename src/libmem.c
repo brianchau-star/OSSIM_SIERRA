@@ -104,7 +104,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
 
     if (cur_vma->vm_end - cur_vma->sbrk + 1 < size)
     {
-      int sizeleft = cur_vma->sbrk + size - cur_vma->vm_end;
+      int sizeleft = cur_vma->sbrk + size - 1 - cur_vma->vm_end; // the rg we gonna allocate will have rg_end at sbrk + size - 1
       int inc_sz = PAGING_PAGE_ALIGNSZ(sizeleft);
       int old_sbrk = cur_vma->sbrk;
       // printf("inc_sz in alloc: %d\n", inc_sz);
@@ -124,16 +124,15 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
       // printf("print pgd in alloc 3: ");
       // print_pgtbl(caller, 0, -1); // In page table
 
-      rgnode = *get_vm_area_node_at_brk(caller, vmaid, sizeleft, inc_sz);
+      rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, inc_sz);
       caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
       caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
 
       *alloc_addr = rgnode.rg_start;
-      // printf("addr in alloc 2: ");
-      // printf("addr: %08x\n", *alloc_addr);
-      cur_vma->sbrk = rgnode.rg_end;
+
+      cur_vma->sbrk = rgnode.rg_end + 1; // sbrk is one byte higher than the highest rg_end ever allocated
       inc_limit_ret = cur_vma->sbrk;
-      // printf("sbrk in alloc: %d\n", inc_limit_ret);
+
       return 0;
     }
 
@@ -146,7 +145,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     *alloc_addr = rgnode.rg_start;
     // printf("addr in alloc 2: ");
     // printf("addr: %08x\n", *alloc_addr);
-    cur_vma->sbrk = rgnode.rg_end;
+    cur_vma->sbrk = rgnode.rg_end + 1;
     inc_limit_ret = cur_vma->sbrk;
     // DEBUG:
     // printf("print pgd in alloc 4: ");
@@ -432,6 +431,7 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller)
  */
 int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller)
 {
+  
   int pgn = PAGING_PGN(addr);   // extract pgn from logical address
   int off = PAGING_OFFST(addr); // extract offset from logical address
   int fpn;
@@ -445,8 +445,11 @@ int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller)
    *  MEMPHY WRITE
    *  SYSCALL 17 sys_memmap with SYSMEM_IO_WRITE
    */
+  printf("fpn: %d\n", fpn);
+  printf("off: %d\n", off);
 
   int phyaddr = (fpn * PAGING_PAGESZ) + off;
+  printf("phyaddr: %d\n", phyaddr);
   struct sc_regs regs;
   regs.a1 = SYSMEM_IO_WRITE;
   regs.a2 = phyaddr; // the addr of the exact byte in RAM
@@ -502,9 +505,9 @@ int libread(
 #endif
   printf("================================================================\n");
   MEMPHY_dump(proc->mram);
-  
+
 #endif
-  
+
   return val;
 }
 
@@ -519,12 +522,12 @@ int libread(
 int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value)
 {
   struct vm_rg_struct *currg = get_symrg_byid(caller->mm, rgid);
-  printf("cur_rg start in __write: %08x\n", currg->rg_start);
+  // printf("cur_rg start in __write: %08x\n", currg->rg_start);
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
 
   if (currg == NULL || cur_vma == NULL) /* Invalid memory identify */
     return -1;
-
+  printf("logical addr: %d\n", currg->rg_start + offset);
   pg_setval(caller->mm, currg->rg_start + offset, value, caller);
   printf("================================================================\n");
   MEMPHY_dump(caller->mram);
@@ -538,6 +541,12 @@ int libwrite(
     uint32_t destination, // Index of destination register // region id
     uint32_t offset)
 {
+  int addr;
+  if (proc->mm->symrgtbl[destination].rg_start == -1 && proc->mm->symrgtbl[destination].rg_end == -1)
+  {
+    __alloc(proc, 0, destination, PAGING_PAGESZ, &addr);
+  }
+  printf("alloc_addr in write: %08x\n", addr);
 #ifdef IODUMP
   printf("===== PHYSICAL MEMORY AFTER WRITING =====\n");
   printf("PID=%d write region=%d offset=%d value=%d\n", proc->pid, destination, offset, data);

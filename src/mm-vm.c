@@ -69,8 +69,8 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
   */
   // printf("addr in getvm 1: %08x\n", cur_vma->sbrk);
   newrg->rg_start = cur_vma->sbrk;
-  newrg->rg_end = newrg->rg_start + size; // use size for sbrk, aligned size for vm_end
-
+  
+  newrg->rg_end = newrg->rg_start + size - 1; // use size for sbrk, aligned size for vm_end, -1 so the region size is exactly = size
   return newrg;
 }
 
@@ -115,7 +115,7 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz)
   area->rg_start = old_end;
   area->rg_end = cur_vma->vm_end;
   /*Validate overlap of obtained region */
-  
+
   if (validate_overlap_vm_area(caller, vmaid, area->rg_start, area->rg_end) < 0)
   {
     cur_vma->vm_end = old_end; // if overlap so we undo the increment
@@ -125,8 +125,8 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz)
   if (vm_map_ram(caller, area->rg_start, area->rg_end,
                  old_end, incnumpage, newrg) < 0)
   {
-    
-     // In page table
+
+    // In page table
     return -1; /* Map the memory to MEMRAM */
   }
 
