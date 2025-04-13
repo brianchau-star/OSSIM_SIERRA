@@ -7,22 +7,28 @@
  * personal permission to use and modify the Licensed Source Code
  * for the sole purpose of studying while attending the course CO2018.
  */
-
 #include "common.h"
 #include "syscall.h"
 #include "stdio.h"
 #include "libmem.h"
 #include "queue.h"
 #include <string.h>
+#include <stdlib.h>
 
+// The code logic for syscall is good but actualy it contains bug in the fuction lib_read
+// @Nhan mention @Tuan Anh need to check logic again in the fucion libread
+// cuz the func libread is calling the func pg_getval
+// so you can start from pg_getval
+// im done my fucking work for this fucking assingment for 5 days
+// gud luck:)))
 int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
 {
     char proc_name[100];
     uint32_t data;
 
     // hardcode for demo only
-    uint32_t memrg = regs->a1;
-
+    uint32_t region_id = regs->a1;
+    uint32_t region_base = caller->mm->symrgtbl[region_id].rg_start;
     /* TODO: Get name of the target proc */
     // proc_name = libread..
 
@@ -30,38 +36,92 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
     data = 0;
     while (data != -1)
     {
-        libread(caller, memrg, i, &data);
+        libread(caller, region_base, i, &data);
         proc_name[i] = data;
         if (data == -1)
             proc_name[i] = '\0';
         i++;
     }
-    printf("The procname retrieved from memregionid %d is \"%s\"\n", memrg, proc_name);
+    printf("The procname retrieved from memregionid %d is \"%s\"\n", region_base, proc_name);
 
-    /* TODO: Traverse proclist to terminate the proc
-     *       stcmp to check the process match proc_name
-     */
-
-    // caller->running_list
-    //  caller->mlq_ready_queue
-    for (int prio = 0; prio < MAX_PRIO; prio++)
+    /* ------------------------------------------------------------------
+     * 1) Remove from running_list
+     * ------------------------------------------------------------------*/
+    if (caller->running_list != NULL)
     {
-        struct queue_t queue_ne = caller->mlq_ready_queue[prio];
-        if (!empty(&queue_ne))
+        int idx = 0;
+        while (idx < caller->running_list->size)
         {
-            for (int proc = 0; proc < queue_ne.size; i++)
+            struct pcb_t *p = caller->running_list->proc[idx];
+            if (strcmp(p->path, proc_name) == 0)
             {
-                if (strcmp(queue_ne.proc[i]->path, proc_name))
+                if (p == caller)
                 {
+                    printf("Killall: Caller (PID %u) marks itself as finished.\n", p->pid);
+                    p->pc = p->code->size;
                 }
+                else
+                {
+                    printf("Killall: Freed process PID %u: %s\n", p->pid, p->path);
+                    free(p);
+                }
+                for (int j = idx; j < caller->running_list->size - 1; j++)
+                {
+                    caller->running_list->proc[j] = caller->running_list->proc[j + 1];
+                }
+                caller->running_list->size--;
+            }
+            else
+            {
+                idx++;
             }
         }
     }
 
-    /* TODO Maching and terminating
-     *       all processes with given
-     *        name in var proc_name
-     */
+#ifdef MLQ_SCHED
+    /* ------------------------------------------------------------------
+     * 2) Remove from MLQ ready queues
+     * ------------------------------------------------------------------*/
+    if (caller->mlq_ready_queue != NULL)
+    {
+        for (int prio = 0; prio < MAX_PRIO; prio++)
+        {
+            struct queue_t *q = &caller->mlq_ready_queue[prio];
+
+            int idx = 0;
+            while (idx < q->size)
+            {
+                struct pcb_t *p = q->proc[idx];
+                if (strcmp(p->path, proc_name) == 0)
+                {
+                    if (p == caller)
+                    {
+                        printf("Killall: Caller (PID %u) marks itself as finished.\n", p->pid);
+                        p->pc = p->code->size;
+                    }
+                    else
+                    {
+                        printf("Killall: Freed process PID %u: %s\n", p->pid, p->path);
+                        free(p);
+                    }
+                    /* Shift queue elements left */
+                    for (int j = idx; j < q->size - 1; j++)
+                    {
+                        q->proc[j] = q->proc[j + 1];
+                    }
+                    q->size--;
+                }
+                else
+                {
+                    idx++;
+                }
+            }
+        }
+    }
+#endif
+
+    /* If you also have a single-level ready_queue,
+     * you can do a similar loop over caller->ready_queue here. */
 
     return 0;
 }
