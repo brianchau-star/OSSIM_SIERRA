@@ -69,7 +69,7 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
   */
   // printf("addr in getvm 1: %08x\n", cur_vma->sbrk);
   newrg->rg_start = cur_vma->sbrk;
-  newrg->rg_end = newrg->rg_start + alignedsz; // SELF NOTE: alignedsz is the aligned size, so I use it instead of size
+  newrg->rg_end = newrg->rg_start + size; // use size for sbrk, aligned size for vm_end
 
   return newrg;
 }

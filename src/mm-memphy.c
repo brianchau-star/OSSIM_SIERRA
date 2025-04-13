@@ -5,6 +5,9 @@
  */
 
 #include "mm.h"
+#include "os-mm.h"
+#include "common.h"
+#include "libmem.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,15 +172,15 @@ int MEMPHY_dump(struct memphy_struct *mp)
       return -1;
    }
 
-   printf("MEMORY DUMP (Size: %d bytes)\n", mp->maxsz);
-
+   printf("===== PHYSICAL MEMORY DUMP =====\n");
    for (int i = 0; i < mp->maxsz; i++)
    {
-      if (i % 16 == 0)
-         printf("\n0x%04X: ", i); // print base address (hexa 4 digits) of each line after every 16 bytes printed
-
-      printf("0x%02X ", mp->storage[i]); // print bytes in hexa 2 digits
+      // if (i % 16 == 0)
+      //    printf("\n0x%04X: ", i); // print base address (hexa 4 digits) of each line after every 16 bytes printed
+      if (mp->storage[i] != 0)
+         printf("BYTE %08x: %d\n", i, mp->storage[i]); // print bytes in hexa 2 digits
    }
+   printf("===== PHYSICAL MEMORY END-DUMP =====\n");
    return 0;
 }
 
