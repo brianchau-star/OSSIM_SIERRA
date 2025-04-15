@@ -188,7 +188,7 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
   new_free_area->vmaid = vmaid;
   /*enlist the obsoleted memory region */
   enlist_vm_freerg_list(caller->mm, new_free_area);
-
+  
   return 0;
 }
 
@@ -492,6 +492,15 @@ int libread(
     uint32_t *destination)
 {
   BYTE data;
+  if (proc->mm->symrgtbl[source].rg_start == -1 && proc->mm->symrgtbl[source].rg_end == -1)
+  {
+    // __alloc(proc, 0, destination, proc->mm->symrgtbl[destination].rg_start + offset, &addr);
+    printf("SEGV: Attempted read to an invalid address\n");
+  }
+  else if (proc->mm->symrgtbl[source].rg_start + offset > proc->mm->symrgtbl[source].rg_end)
+  {
+    printf("SEGV: Attempted read to an invalid address\n");
+  }
   int val = __read(proc, 0, source, offset, &data);
 
   /* TODO update result of reading action*/
@@ -527,7 +536,7 @@ int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value)
 
   if (currg == NULL || cur_vma == NULL) /* Invalid memory identify */
     return -1;
-  printf("logical addr: %d\n", currg->rg_start + offset);
+  // printf("logical addr: %d\n", currg->rg_start + offset);
   pg_setval(caller->mm, currg->rg_start + offset, value, caller);
   printf("================================================================\n");
   MEMPHY_dump(caller->mram);
@@ -544,9 +553,15 @@ int libwrite(
   int addr;
   if (proc->mm->symrgtbl[destination].rg_start == -1 && proc->mm->symrgtbl[destination].rg_end == -1)
   {
-    __alloc(proc, 0, destination, PAGING_PAGESZ, &addr);
+    // __alloc(proc, 0, destination, proc->mm->symrgtbl[destination].rg_start + offset, &addr);
+    printf("SEGV: Attempted write to an invalid address\n");
   }
-  printf("alloc_addr in write: %08x\n", addr);
+  else if (proc->mm->symrgtbl[destination].rg_start + offset > proc->mm->symrgtbl[destination].rg_end)
+  {
+    printf("SEGV: Attempted write to an invalid address\n");
+  }
+
+  // printf("alloc_addr in write: %08x\n", addr);
 #ifdef IODUMP
   printf("===== PHYSICAL MEMORY AFTER WRITING =====\n");
   printf("PID=%d write region=%d offset=%d value=%d\n", proc->pid, destination, offset, data);
