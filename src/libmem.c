@@ -504,7 +504,10 @@ int libread(
   int val = __read(proc, 0, source, offset, &data);
 
   /* TODO update result of reading action*/
-  *destination = val;
+  if (val == 0)
+  {
+    *destination = data;
+  }
 
 #ifdef IODUMP
   printf("===== PHYSICAL MEMORY AFTER READING =====\n");
@@ -589,13 +592,13 @@ int free_pcb_memph(struct pcb_t *caller)
 
     if (!PAGING_PAGE_PRESENT(pte))
     {
-      fpn = PAGING_PTE_FPN(pte);
-      MEMPHY_put_freefp(caller->mram, fpn);
+      fpn = PAGING_PTE_SWP(pte);
+      MEMPHY_put_freefp(caller->active_mswp, fpn);
     }
     else
     {
-      fpn = PAGING_PTE_SWP(pte);
-      MEMPHY_put_freefp(caller->active_mswp, fpn);
+      fpn = PAGING_PTE_FPN(pte);
+      MEMPHY_put_freefp(caller->mram, fpn);
     }
   }
 
