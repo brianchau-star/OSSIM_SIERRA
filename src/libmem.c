@@ -138,7 +138,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
 
     // printf("addr in alloc 1: ");
     // printf("addr: %08x\n", *alloc_addr);
-    rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, size); 
+    rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, size);
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
 
@@ -487,7 +487,10 @@ int libread(
   int val = __read(proc, 0, source, offset, &data);
 
   /* TODO update result of reading action*/
-  *destination = val;
+  if (val == 0)
+  {
+    *destination = data;
+  }
 
 #ifdef IODUMP
   printf("read region=%d offset=%d value=%d\n", source, offset, data);
@@ -557,13 +560,13 @@ int free_pcb_memph(struct pcb_t *caller)
 
     if (!PAGING_PAGE_PRESENT(pte))
     {
-      fpn = PAGING_PTE_FPN(pte);
-      MEMPHY_put_freefp(caller->mram, fpn);
+      fpn = PAGING_PTE_SWP(pte);
+      MEMPHY_put_freefp(caller->active_mswp, fpn);
     }
     else
     {
-      fpn = PAGING_PTE_SWP(pte);
-      MEMPHY_put_freefp(caller->active_mswp, fpn);
+      fpn = PAGING_PTE_FPN(pte);
+      MEMPHY_put_freefp(caller->mram, fpn);
     }
   }
 

@@ -20,6 +20,30 @@ void enqueue(struct queue_t *q, struct pcb_t *proc)
         q->size++;
 }
 
+void remove_from_queue(struct queue_t *q, struct pcb_t *proc)
+{
+        if (q == NULL || proc == NULL || q->size == 0)
+        {
+                printf("bug roi null pointer roi");
+                return;
+        }
+
+#ifdef MLQ_SCHED
+        for (int i = 0; i < q->size; i++)
+        {
+                if (q->proc[i] == proc)
+                {
+                        for (int j = i; j < q->size - 1; j++)
+                        {
+                                q->proc[j] = q->proc[j + 1];
+                        }
+                        q->size--;
+                        return;
+                }
+        }
+#endif
+}
+
 struct pcb_t *dequeue(struct queue_t *q)
 {
         if (q == NULL || q->size == 0)
