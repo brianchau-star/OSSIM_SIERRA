@@ -162,33 +162,85 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
  *@size: allocated size
  *
  */
+
+/* @Nhan
+ * Enhanced __free() implementation with adjacent free region merging.
+ *
+ * When a memory region is freed, it may be adjacent to existing free regions
+ * in the vm_freerg_list. To reduce fragmentation and maximize available memory,
+ * we merge all adjacent regions into one single free region.
+ *
+ * The function scans through the free region list once (O(n)) and merges any region
+ * whose start or end matches the freed region's end or start respectively.
+ *
+ * Merged regions are removed from the list and their memory is released.
+ * The resulting merged region is then inserted back into the free list.
+ *
+ * This approach avoids costly O(n^2) performance caused by repeatedly restarting
+ * the scan for each merge. Only a single pass is needed to complete all merges.
+ */
+
 int __free(struct pcb_t *caller, int vmaid, int rgid)
 {
-  struct vm_rg_struct rgnode;
-
-  // Dummy initialization for avoding compiler dummay warning
-  // in incompleted TODO code rgnode will overwrite through implementing
-  // the manipulation of rgid later
-
-  if (rgid < 0 || rgid > PAGING_MAX_SYMTBL_SZ)
+  if (rgid < 0 || rgid >= PAGING_MAX_SYMTBL_SZ)
     return -1;
 
-  /* TODO: Manage the collect freed region to freerg_list */
-  struct vm_rg_struct *free_region = get_symrg_byid(caller->mm, rgid);
-  int free_start = free_region->rg_start;
-  int free_end = free_region->rg_end;
+  struct vm_rg_struct *symrg = get_symrg_byid(caller->mm, rgid);
+  if (!symrg || symrg->rg_start == -1)
+    return -1;
 
-  // freed free_region
-  free_region->rg_start = -1;
-  free_region->rg_end = -1;
+  unsigned long free_s = symrg->rg_start;
+  unsigned long free_e = symrg->rg_end;
+  symrg->rg_start = symrg->rg_end = -1;
 
-  struct vm_rg_struct *new_free_area = (struct vm_rg_struct *)malloc(sizeof(struct vm_rg_struct));
-  new_free_area->rg_start = free_start;
-  new_free_area->rg_end = free_end;
-  new_free_area->vmaid = vmaid;
-  /*enlist the obsoleted memory region */
-  enlist_vm_freerg_list(caller->mm, new_free_area);
-  
+  struct vm_area_struct *vma = get_vma_by_num(caller->mm, vmaid);
+  if (!vma)
+    return -1;
+
+  struct vm_rg_struct *cur = vma->vm_freerg_list;
+  struct vm_rg_struct *prev = NULL;
+
+  while (cur)
+  {
+    int need_merge = 0;
+
+    if (free_e == cur->rg_start)
+    {
+      free_e = cur->rg_end;
+      need_merge = 1;
+    }
+    else if (free_s == cur->rg_end)
+    {
+      free_s = cur->rg_start;
+      need_merge = 1;
+    }
+
+    if (need_merge)
+    {
+      // Remove cur from list
+      if (prev == NULL)
+        vma->vm_freerg_list = cur->rg_next;
+      else
+        prev->rg_next = cur->rg_next;
+
+      struct vm_rg_struct *tmp = cur;
+      cur = cur->rg_next;
+      free(tmp);
+      continue;
+    }
+
+    prev = cur;
+    cur = cur->rg_next;
+  }
+
+  struct vm_rg_struct *new_free = (struct vm_rg_struct *)malloc(sizeof(struct vm_rg_struct));
+  new_free->rg_start = free_s;
+  new_free->rg_end = free_e;
+  new_free->vmaid = vmaid;
+  new_free->rg_next = NULL;
+
+  enlist_vm_freerg_list(caller->mm, new_free);
+
   return 0;
 }
 
@@ -249,7 +301,7 @@ int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
 
   print_pgtbl(proc, 0, -1); // In page table
 #endif
-  // MEMPHY_dump(proc->mram); // In nội dung RAM
+  MEMPHY_dump(proc->mram); // In nội dung RAM
   printf("================================================================\n");
 #endif
   return 0;
@@ -305,7 +357,7 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
 #ifdef PAGETBL_DUMP
     print_pgtbl(proc, 0, -1);
 #endif
-    // MEMPHY_dump(proc->mram);
+    MEMPHY_dump(proc->mram);
 #endif
   }
 
@@ -326,6 +378,7 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
   if (PAGING_PAGE_PRESENT(pte))
   {
     *fpn = PAGING_FPN(pte);
+    enlist_pgn_node(&mm->fifo_pgn, pgn);
     // printf("present\n");
   }
   else
@@ -431,7 +484,7 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller)
  */
 int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller)
 {
-  
+
   int pgn = PAGING_PGN(addr);   // extract pgn from logical address
   int off = PAGING_OFFST(addr); // extract offset from logical address
   int fpn;
