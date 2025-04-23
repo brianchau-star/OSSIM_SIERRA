@@ -52,6 +52,7 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
         int idx = 0;
         while (idx < caller->running_list->size)
         {
+
             printf("Size neeeeee %d \n", caller->running_list->size);
             struct pcb_t *p = caller->running_list->proc[idx];
             if (p && strcmp(p->path + 11, proc_name) == 0)
@@ -60,13 +61,13 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
                 {
                     printf("Killall: Caller (PID %u) marks itself as finished.\n", p->pid);
                     p->pc = p->code->size;
-                    p->is_killed = 1;
                 }
                 else
                 {
                     printf("Killall: Freed process PID %u: %s\n", p->pid, p->path);
-                    p->is_killed = 1;
-                    libfree(p, region_id);
+                    p->pc = p->code->size;
+
+                    // libfree(p, region_id);
                 }
                 for (int j = idx; j < caller->running_list->size - 1; j++)
                 {
@@ -100,14 +101,15 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
                     if (p == caller)
                     {
                         printf("Killall: Caller (PID %u) marks itself as finished.\n", p->pid);
-                        p->is_killed = 1;
+                        // p->is_killed = 1;
                         p->pc = p->code->size;
                     }
                     else
                     {
                         printf("Killall: Freed process PID %u: %s\n", p->pid, p->path);
-                        p->is_killed = 1;
-                        libfree(p, region_id);
+                        // p->is_killed = 1;
+                        p->pc = p->code->size;
+                        free_pcb_memph(p);
                     }
                     /* Shift queue elements left */
                     for (int j = idx; j < q->size - 1; j++)

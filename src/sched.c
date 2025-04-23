@@ -129,7 +129,7 @@ struct pcb_t *get_mlq_proc(void)
 			if (!proc)
 				continue;
 
-			if (proc->is_killed)
+			if (proc->pc == proc->code->size)
 			{
 				printf("[MLQ] Skipping killed process PID %d\n", proc->pid);
 				free(proc);
@@ -158,7 +158,7 @@ struct pcb_t *get_mlq_proc(void)
 			if (!proc)
 				continue;
 
-			if (proc->is_killed)
+			if (proc->pc == proc->code->size)
 			{
 				printf("[MLQ] Skipping killed process PID %d\n", proc->pid);
 				free(proc);
