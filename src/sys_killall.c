@@ -22,6 +22,17 @@
 // im done my fucking work for this fucking assingment for 5 days
 // gud luck:)))
 int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
+#include "queue.h"
+#include <string.h>
+#include <stdlib.h>
+
+// The code logic for syscall is good but actualy it contains bug in the fuction lib_read
+// @Nhan mention @Tuan Anh need to check logic again in the fucion libread
+// cuz the func libread is calling the func pg_getval
+// so you can start from pg_getval
+// im done my fucking work for this fucking assingment for 5 days
+// gud luck:)))
+int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
 {
     char proc_name[100];
     uint32_t data;
@@ -29,7 +40,12 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
     // hardcode for demo only
     uint32_t region_id = regs->a1;
     // uint32_t region_base = caller->mm->symrgtbl[region_id].rg_start;
+    // hardcode for demo only
+    uint32_t region_id = regs->a1;
+    // uint32_t region_base = caller->mm->symrgtbl[region_id].rg_start;
     /* TODO: Get name of the target proc */
+    // proc_name = libread..
+
     // proc_name = libread..
 
     int i = 0;
@@ -40,8 +56,15 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
         proc_name[i] = data;
         if (data == -1)
             proc_name[i] = '\0';
+    while (data != -1)
+    {
+        libread(caller, region_id, i, &data);
+        proc_name[i] = data;
+        if (data == -1)
+            proc_name[i] = '\0';
         i++;
     }
+    printf("The procname retrieved from memregionid %d is \"%s\"\n", region_id, proc_name);
     printf("The procname retrieved from memregionid %d is \"%s\"\n", region_id, proc_name);
 
     /* ------------------------------------------------------------------
@@ -128,5 +151,6 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
     /* If you also have a single-level ready_queue,
      * you can do a similar loop over caller->ready_queue here. */
 
+    return 0;
     return 0;
 }

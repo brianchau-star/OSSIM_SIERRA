@@ -68,9 +68,10 @@ struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
   // newrg->rg_end = ...
   */
   // printf("addr in getvm 1: %08x\n", cur_vma->sbrk);
+  // printf("addr in getvm 1: %08x\n", cur_vma->sbrk);
   newrg->rg_start = cur_vma->sbrk;
-  newrg->rg_end = newrg->rg_start + alignedsz; // SELF NOTE: alignedsz is the aligned size, so I use it instead of size
-
+  
+  newrg->rg_end = newrg->rg_start + size - 1; // use size for sbrk, aligned size for vm_end, -1 so the region size is exactly = size
   return newrg;
 }
 
@@ -128,6 +129,7 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz)
     
      // In page table
     return -1; /* Map the memory to MEMRAM */
+  }
   }
 
   free(area);
