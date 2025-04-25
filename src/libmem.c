@@ -76,12 +76,15 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   // rgnode.vmaid
   rgnode.vmaid = vmaid;
 
+
   if (get_free_vmrg_area(caller, vmaid, size, &rgnode) == 0)
   {
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
 
     *alloc_addr = rgnode.rg_start;
+    // DEBUG:
+    printf("get free area success\n");
     // DEBUG:
     printf("get free area success\n");
 
@@ -92,9 +95,11 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   {
     // DEBUG:
     //  printf("cannot get free area\n");
+    // DEBUG:
+    //  printf("cannot get free area\n");
     struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
-    // printf("Hello");
-    // printf("SBRK: %d  END: %d", cur_vma->sbrk, cur_vma->vm_end);
+    printf("Hello");
+    printf("SBRK: %d  END: %d", cur_vma->sbrk, cur_vma->vm_end);
 
     // @Nhan: Be careful when using aligned size (inc_sz) to extend sbrk.
     // Since inc_sz is rounded up to the nearest page size, sbrk may hit vm_end
@@ -102,10 +107,10 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     // This isn't wrong, but it wastes memory — and over time, we might run out of it.
     // So in practice, aligning everything may not be the best idea.
 
+    int inc_sz = PAGING_PAGE_ALIGNSZ(size);
+
     if (cur_vma->vm_end - cur_vma->sbrk + 1 < size)
     {
-      int sizeleft = cur_vma->sbrk + size - 1 - cur_vma->vm_end; // the rg we gonna allocate will have rg_end at sbrk + size - 1
-      int inc_sz = PAGING_PAGE_ALIGNSZ(sizeleft);
       int old_sbrk = cur_vma->sbrk;
       // printf("inc_sz in alloc: %d\n", inc_sz);
       struct sc_regs regs;
@@ -124,15 +129,15 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
       // printf("print pgd in alloc 3: ");
       // print_pgtbl(caller, 0, -1); // In page table
 
-      rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, inc_sz);
+      rgnode = *get_vm_area_node_at_brk(caller, vmaid, size, size);
       caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
       caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
 
       *alloc_addr = rgnode.rg_start;
-
-      cur_vma->sbrk = rgnode.rg_end + 1; // sbrk is one byte higher than the highest rg_end ever allocated
+      // printf("addr in alloc 2: ");
+      // printf("addr: %08x\n", *alloc_addr);
+      cur_vma->sbrk = rgnode.rg_end;
       inc_limit_ret = cur_vma->sbrk;
-
       return 0;
     }
 
@@ -145,8 +150,12 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     *alloc_addr = rgnode.rg_start;
     // printf("addr in alloc 2: ");
     // printf("addr: %08x\n", *alloc_addr);
-    cur_vma->sbrk = rgnode.rg_end + 1;
+    cur_vma->sbrk = rgnode.rg_end;
     inc_limit_ret = cur_vma->sbrk;
+    // DEBUG:
+    // printf("print pgd in alloc 4: ");
+    // print_pgtbl(caller, 0, -1); // In page table
+  }
     // DEBUG:
     // printf("print pgd in alloc 4: ");
     // print_pgtbl(caller, 0, -1); // In page table
@@ -257,10 +266,17 @@ int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
 
   int addr = 0;
   int freerg_id = -1;    // the region id that has not been in logical address, so also not point to a frame
+  // DEBUG:
+  // printf("first print: ");
+  // print_pgtbl(proc, 0, -1);
+
+  int addr = 0;
+  int freerg_id = -1;    // the region id that has not been in logical address, so also not point to a frame
   int freerg_vmaid = -1; // @TuanAnh: we also need to update freerg_vmaid to use _alloc()
   if (proc->mm->symrgtbl[reg_index].rg_start == -1 &&
       proc->mm->symrgtbl[reg_index].rg_end == -1)
   {
+    // printf("use reg_index\n"); DEBUG
     // printf("use reg_index\n"); DEBUG
     freerg_id = reg_index;
     freerg_vmaid = proc->mm->symrgtbl[reg_index].vmaid;
@@ -286,7 +302,14 @@ int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
   // print_pgtbl(proc, 0, -1); // In page table
   // printf("addr in liballoc 1: %08x\n", addr);
   if (__alloc(proc, 0, freerg_id, size, &addr) == 0)
+  // DEBUG:
+  // printf("2 print: ");
+  // print_pgtbl(proc, 0, -1); // In page table
+  // printf("addr in liballoc 1: %08x\n", addr);
+  if (__alloc(proc, 0, freerg_id, size, &addr) == 0)
   {
+    // proc->regs[reg_index] = addr;
+    proc->regs[freerg_id] = addr;
     // proc->regs[reg_index] = addr;
     proc->regs[freerg_id] = addr;
   }
@@ -294,16 +317,23 @@ int liballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
   // DEBUG:
   // printf("3 print: ");
   // print_pgtbl(proc, 0, -1); // In page table
+  // printf("addr in liballoc 2: %08x\n", addr);
+  // DEBUG:
+  // printf("3 print: ");
+  // print_pgtbl(proc, 0, -1); // In page table
 #ifdef IODUMP
   printf("===== PHYSICAL MEMORY AFTER ALLOCATION =====\n");
   printf("PID=%d - Region=%d - Address=%08x - Size=%u byte\n", proc->pid, freerg_id, addr, size);
+  printf("PID=%d - Region=%d - Address=%08x - Size=%u byte\n", proc->pid, freerg_id, addr, size);
 #ifdef PAGETBL_DUMP
+
 
   print_pgtbl(proc, 0, -1); // In page table
 #endif
-  MEMPHY_dump(proc->mram); // In nội dung RAM
+  // MEMPHY_dump(proc->mram); // In nội dung RAM
   printf("================================================================\n");
 #endif
+  return 0;
   return 0;
 }
 
@@ -342,6 +372,7 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
     return -1;
 
   int result = __free(proc, 0, region_id);
+  int result = __free(proc, 0, region_id);
 
   if (result == 0)
   {
@@ -349,6 +380,7 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
 
 #ifdef IODUMP
     printf("===== PHYSICAL MEMORY AFTER DEALLOCATION =====\n");
+    printf("PID=%d - Region=%d (Virtual [%lu - %lu])\n",
     printf("PID=%d - Region=%d (Virtual [%lu - %lu])\n",
            proc->pid,
            region_id,
@@ -465,7 +497,7 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller)
   // printf("phyaddr in getval: %08x\n", phyaddr);
   struct sc_regs regs;
   regs.a1 = SYSMEM_IO_READ;
-  regs.a2 = phyaddr;
+  regs.a2 = addr;
   // regs.a3 = *data; // @TuanAnh: we dont need a3 for SYSTEM_IO_READ
 
   /* SYSCALL 17 sys_memmap */
@@ -561,6 +593,10 @@ int libread(
   {
     *destination = data;
   }
+  if (val == 0)
+  {
+    *destination = data;
+  }
 
 #ifdef IODUMP
   printf("===== PHYSICAL MEMORY AFTER READING =====\n");
@@ -620,13 +656,14 @@ int libwrite(
   // printf("alloc_addr in write: %08x\n", addr);
 #ifdef IODUMP
   printf("===== PHYSICAL MEMORY AFTER WRITING =====\n");
-  printf("PID=%d write region=%d offset=%d value=%d\n", proc->pid, destination, offset, data);
+  printf("write region=%d offset=%d value=%d\n", destination, offset, data);
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); // print max TBL
 #endif
   // MEMPHY_dump(proc->mram);
 #endif
   return __write(proc, 0, destination, offset, data);
+  printf("================================================================\n");
 }
 
 /*free_pcb_memphy - collect all memphy of pcb
@@ -647,6 +684,11 @@ int free_pcb_memph(struct pcb_t *caller)
     {
       fpn = PAGING_PTE_SWP(pte);
       MEMPHY_put_freefp(caller->active_mswp, fpn);
+    }
+    else
+    {
+      fpn = PAGING_PTE_FPN(pte);
+      MEMPHY_put_freefp(caller->mram, fpn);
     }
     else
     {
