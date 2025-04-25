@@ -117,53 +117,72 @@ struct pcb_t *get_mlq_proc(void)
 {
 	struct pcb_t *proc = NULL;
 
-	// Acquire lock to protect shared ready queues and slot counters
 	pthread_mutex_lock(&queue_lock);
 
+	// 1. First pass: Try to get process with slot available
 	for (int prio = 0; prio < MAX_PRIO; prio++)
 	{
-		if (slot[prio] > 0 && !empty(&mlq_ready_queue[prio]))
+		while (slot[prio] > 0 && !empty(&mlq_ready_queue[prio]))
 		{
 			proc = dequeue(&mlq_ready_queue[prio]);
-			if (proc)
+
+			if (!proc)
+				continue;
+
+			if (proc->pc == proc->code->size)
 			{
-				// Consume one time‑slice from this priority level
-				slot[prio]--;
+				printf("[MLQ] Skipping killed process PID %d\n", proc->pid);
+				free(proc);
+				continue;
 			}
-			// Release lock and return the selected process
+
+			slot[prio]--;
 			pthread_mutex_unlock(&queue_lock);
 			return proc;
 		}
 	}
 
-	// 2) No eligible queue found: reset all slot counters for a new period
+	// 2. Reset slot counters
 	for (int prio = 0; prio < MAX_PRIO; prio++)
 	{
 		slot[prio] = MAX_PRIO - prio;
 	}
 
-	// 3) Second pass: after reset, pick the first non‑empty queue
+	// 3. Second pass: Retry after reset
 	for (int prio = 0; prio < MAX_PRIO; prio++)
 	{
-		if (slot[prio] > 0 && !empty(&mlq_ready_queue[prio]))
+		while (slot[prio] > 0 && !empty(&mlq_ready_queue[prio]))
 		{
 			proc = dequeue(&mlq_ready_queue[prio]);
-			if (proc)
+
+			if (!proc)
+				continue;
+
+			if (proc->pc == proc->code->size)
 			{
-				slot[prio]--;
+				printf("[MLQ] Skipping killed process PID %d\n", proc->pid);
+				free(proc);
+				continue;
 			}
-			break;
+
+			slot[prio]--;
+			pthread_mutex_unlock(&queue_lock);
+			return proc;
 		}
 	}
 
-	// Release lock and return (may be NULL if no process is ready)
 	pthread_mutex_unlock(&queue_lock);
-	return proc;
+	return NULL;
 }
+
 void put_mlq_proc(struct pcb_t *proc)
 {
 	pthread_mutex_lock(&queue_lock);
-	enqueue(&mlq_ready_queue[proc->prio], proc);
+	if (proc)
+	{
+		remove_from_queue(&running_list, proc);
+		enqueue(&mlq_ready_queue[proc->prio], proc);
+	}
 	pthread_mutex_unlock(&queue_lock);
 }
 
@@ -176,7 +195,15 @@ void add_mlq_proc(struct pcb_t *proc)
 
 struct pcb_t *get_proc(void)
 {
-	return get_mlq_proc();
+	struct pcb_t *proc = get_mlq_proc();
+	if (proc)
+	{
+		pthread_mutex_lock(&queue_lock);
+		enqueue(&running_list, proc);
+		pthread_mutex_unlock(&queue_lock);
+	}
+
+	return proc;
 }
 
 void put_proc(struct pcb_t *proc)

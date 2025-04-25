@@ -52,7 +52,7 @@ struct mm_struct {
    struct vm_area_struct *mmap; // SELF NOTE: a pointer to the first vm_area of a linkedlist of vm_area
 
    /* Currently we support a fixed number of symbol */
-   struct vm_rg_struct symrgtbl[PAGING_MAX_SYMTBL_SZ];
+   struct vm_rg_struct symrgtbl[PAGING_MAX_SYMTBL_SZ]; // lsit of region that has been allocated (point to a frame that has data)
 
    /* list of free page */
    struct pgn_t *fifo_pgn;
