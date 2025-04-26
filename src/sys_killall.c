@@ -22,17 +22,6 @@
 // im done my fucking work for this fucking assingment for 5 days
 // gud luck:)))
 int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
-#include "queue.h"
-#include <string.h>
-#include <stdlib.h>
-
-// The code logic for syscall is good but actualy it contains bug in the fuction lib_read
-// @Nhan mention @Tuan Anh need to check logic again in the fucion libread
-// cuz the func libread is calling the func pg_getval
-// so you can start from pg_getval
-// im done my fucking work for this fucking assingment for 5 days
-// gud luck:)))
-int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
 {
     char proc_name[100];
     uint32_t data;
@@ -40,12 +29,7 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
     // hardcode for demo only
     uint32_t region_id = regs->a1;
     // uint32_t region_base = caller->mm->symrgtbl[region_id].rg_start;
-    // hardcode for demo only
-    uint32_t region_id = regs->a1;
-    // uint32_t region_base = caller->mm->symrgtbl[region_id].rg_start;
     /* TODO: Get name of the target proc */
-    // proc_name = libread..
-
     // proc_name = libread..
 
     int i = 0;
@@ -56,15 +40,8 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
         proc_name[i] = data;
         if (data == -1)
             proc_name[i] = '\0';
-    while (data != -1)
-    {
-        libread(caller, region_id, i, &data);
-        proc_name[i] = data;
-        if (data == -1)
-            proc_name[i] = '\0';
         i++;
     }
-    printf("The procname retrieved from memregionid %d is \"%s\"\n", region_id, proc_name);
     printf("The procname retrieved from memregionid %d is \"%s\"\n", region_id, proc_name);
 
     /* ------------------------------------------------------------------
@@ -75,6 +52,7 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
         int idx = 0;
         while (idx < caller->running_list->size)
         {
+
             printf("Size neeeeee %d \n", caller->running_list->size);
             struct pcb_t *p = caller->running_list->proc[idx];
             if (p && strcmp(p->path + 11, proc_name) == 0)
@@ -84,12 +62,15 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
                     printf("Killall: Caller (PID %u) marks itself as finished.\n", p->pid);
                     p->pc = p->code->size;
                     p->is_killed = 1;
+                    free_pcb_memph(p);
                 }
                 else
                 {
                     printf("Killall: Freed process PID %u: %s\n", p->pid, p->path);
+                    p->pc = p->code->size;
                     p->is_killed = 1;
-                    libfree(p, region_id);
+                    // libfree(p, region_id);
+                    free_pcb_memph(p);
                 }
                 for (int j = idx; j < caller->running_list->size - 1; j++)
                 {
@@ -129,8 +110,10 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
                     else
                     {
                         printf("Killall: Freed process PID %u: %s\n", p->pid, p->path);
+                        printf("path %s  pid %d is killed  %d \n ", p->path, p->pid, p->is_killed);
                         p->is_killed = 1;
-                        libfree(p, region_id);
+                        p->pc = p->code->size;
+                        free_pcb_memph(p);
                     }
                     /* Shift queue elements left */
                     for (int j = idx; j < q->size - 1; j++)
@@ -151,6 +134,5 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs *regs)
     /* If you also have a single-level ready_queue,
      * you can do a similar loop over caller->ready_queue here. */
 
-    return 0;
     return 0;
 }
