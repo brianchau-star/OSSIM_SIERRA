@@ -120,10 +120,8 @@ struct pcb_t *get_mlq_proc(void)
 	pthread_mutex_lock(&queue_lock);
 
 	// 1. First pass: Try to get process with slot available
-	// 1. First pass: Try to get process with slot available
 	for (int prio = 0; prio < MAX_PRIO; prio++)
 	{
-		while (slot[prio] > 0 && !empty(&mlq_ready_queue[prio]))
 		while (slot[prio] > 0 && !empty(&mlq_ready_queue[prio]))
 		{
 			proc = dequeue(&mlq_ready_queue[prio]);
@@ -131,7 +129,7 @@ struct pcb_t *get_mlq_proc(void)
 			if (!proc)
 				continue;
 
-			if (proc->is_killed)
+			if (proc->pc == proc->code->size)
 			{
 				printf("[MLQ] Skipping killed process PID %d\n", proc->pid);
 				free(proc);
@@ -145,17 +143,14 @@ struct pcb_t *get_mlq_proc(void)
 	}
 
 	// 2. Reset slot counters
-	// 2. Reset slot counters
 	for (int prio = 0; prio < MAX_PRIO; prio++)
 	{
 		slot[prio] = MAX_PRIO - prio;
 	}
 
 	// 3. Second pass: Retry after reset
-	// 3. Second pass: Retry after reset
 	for (int prio = 0; prio < MAX_PRIO; prio++)
 	{
-		while (slot[prio] > 0 && !empty(&mlq_ready_queue[prio]))
 		while (slot[prio] > 0 && !empty(&mlq_ready_queue[prio]))
 		{
 			proc = dequeue(&mlq_ready_queue[prio]);
@@ -163,7 +158,7 @@ struct pcb_t *get_mlq_proc(void)
 			if (!proc)
 				continue;
 
-			if (proc->is_killed)
+			if (proc->pc == proc->code->size)
 			{
 				printf("[MLQ] Skipping killed process PID %d\n", proc->pid);
 				free(proc);
@@ -178,18 +173,11 @@ struct pcb_t *get_mlq_proc(void)
 
 	pthread_mutex_unlock(&queue_lock);
 	return NULL;
-	return NULL;
 }
-
 
 void put_mlq_proc(struct pcb_t *proc)
 {
 	pthread_mutex_lock(&queue_lock);
-	if (proc)
-	{
-		remove_from_queue(&running_list, proc);
-		enqueue(&mlq_ready_queue[proc->prio], proc);
-	}
 	if (proc)
 	{
 		remove_from_queue(&running_list, proc);
@@ -207,15 +195,6 @@ void add_mlq_proc(struct pcb_t *proc)
 
 struct pcb_t *get_proc(void)
 {
-	struct pcb_t *proc = get_mlq_proc();
-	if (proc)
-	{
-		pthread_mutex_lock(&queue_lock);
-		enqueue(&running_list, proc);
-		pthread_mutex_unlock(&queue_lock);
-	}
-
-	return proc;
 	struct pcb_t *proc = get_mlq_proc();
 	if (proc)
 	{

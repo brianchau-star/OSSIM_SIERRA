@@ -74,9 +74,17 @@ static void *cpu_routine(void *args)
 		}
 		else if (proc->pc == proc->code->size)
 		{
+			// printf("proc_pid: %d is killed: %d \n", proc->pid, proc->is_killed);
+			if (proc->is_killed)
+			{
+				printf(" \tCPU %d: The process %d has been killed by syscall killall \n", id, proc->pid);
+			}
 			/* The porcess has finish it job */
-			printf("\tCPU %d: Processed %2d has finished\n",
-				   id, proc->pid);
+			else
+			{
+				printf("\tCPU %d: Processed %2d has finished\n",
+					   id, proc->pid);
+			}
 			free(proc);
 			proc = get_proc();
 			time_left = 0;
