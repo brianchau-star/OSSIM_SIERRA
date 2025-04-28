@@ -381,6 +381,7 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
     enlist_pgn_node(&mm->fifo_pgn, pgn);
     // printf("present\n");
   }
+  
   else
   {
     // it means the page  dont have the physical memory in ram
