@@ -105,6 +105,10 @@ switch (ins.opcode)
 	case SYSCALL:
 		stat = libsyscall(proc, ins.arg_0, ins.arg_1, ins.arg_2, ins.arg_3);
 		break;
+
+	case DUMP:
+		stat = mmap(proc, ins.arg_0);
+		break;
 	default:
 		stat = 1;
 	}

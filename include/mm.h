@@ -162,4 +162,5 @@ int print_list_vma(struct vm_area_struct *rg);
 
 int print_list_pgn(struct pgn_t *ip);
 int print_pgtbl(struct pcb_t *ip, uint32_t start, uint32_t end);
+int memmap(struct pcb_t *caller, int regionid);
 #endif

@@ -32,6 +32,7 @@ enum ins_opcode_t
 	READ,  // Write data to a byte on memory
 	WRITE, // Read data from a byte on memory
 	SYSCALL,
+	DUMP
 };
 
 /* instructions executed by the CPU */
