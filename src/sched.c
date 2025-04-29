@@ -45,7 +45,24 @@ void init_scheduler(void)
 	run_queue.size = 0;
 	pthread_mutex_init(&queue_lock, NULL);
 }
+struct pcb_t *find_running_proc(uint32_t target_pid)
+{
+	struct pcb_t *result = NULL;
 
+	pthread_mutex_lock(&queue_lock);
+	for (int i = 0; i < running_list.size; i++)
+	{
+		struct pcb_t *p = running_list.proc[i];
+		if (p && p->pid == target_pid)
+		{
+			result = p;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&queue_lock);
+
+	return result;
+}
 #ifdef MLQ_SCHED
 /*
  *  Stateful design for routine calling
@@ -74,44 +91,6 @@ void init_scheduler(void)
  *   - Change the scan loop to always start at prio = 0, not at current_prio.
  *   - After dequeueing, update current_prio and curr_slot appropriately.
  */
-// struct pcb_t *get_mlq_proc(void)
-// {
-// 	/*TODO: get a process from PRIORITY [ready_queue].
-// 	 * Remember to use lock to protect the queue.
-// 	 * */
-// 	pthread_mutex_lock(&queue_lock);
-// 	struct pcb_t *proc = NULL;
-// 	int start_prio = current_prio;
-// 	int isFinished = 0;
-
-// 	while (!isFinished)
-// 	{
-// 		if (!empty(&mlq_ready_queue[current_prio]) && curr_slot < slot[current_prio])
-// 		{
-// 			proc = dequeue(&mlq_ready_queue[current_prio]);
-// 			if (proc != NULL)
-// 			{
-// 				curr_slot++;
-// 				if (curr_slot >= slot[current_prio])
-// 				{
-// 					curr_slot = 0;
-// 					current_prio = (current_prio + 1) % MAX_PRIO;
-// 				}
-// 				break;
-// 			}
-// 		}
-
-// 		current_prio = (current_prio + 1) % MAX_PRIO;
-// 		curr_slot = 0;
-// 		if (current_prio == start_prio)
-// 		{
-// 			isFinished = 1;
-// 		}
-// 	}
-// 	pthread_mutex_unlock(&queue_lock);
-
-// 	return proc;
-// }
 
 struct pcb_t *get_mlq_proc(void)
 {

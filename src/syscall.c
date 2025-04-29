@@ -10,6 +10,7 @@
 
 #include "syscall.h"
 #include "common.h"
+#include "mm.h"
 
 #define __SYSCALL(nr, sym) extern int __##sym(struct pcb_t*,struct sc_regs*);
 #include "syscalltbl.lst"
@@ -28,10 +29,6 @@ const int syscall_table_size = sizeof(sys_call_table)/sizeof(char*);
 
 int __sys_ni_syscall(struct pcb_t *caller, struct sc_regs *regs)
 {
-   /*
-    * DUMMY systemcall
-    */
-
    return 0;
 }
 
